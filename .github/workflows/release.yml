@@ -1,11 +1,55 @@
-# Build the App!
-- name: Build Tauri App
-  uses: tauri-apps/tauri-action@v0
-  env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  with:
-      tagName: ${{ github.ref_name }}
-      releaseName: "ClipDude v__VERSION__"
-      releaseBody: "New release of ClipDude."
-      releaseDraft: false
-      prerelease: false
+name: Release ClipDude
+
+on:
+    push:
+        tags:
+            - "v*" # Triggers when you push a tag like v1.0.0
+
+jobs:
+    build-tauri:
+        strategy:
+            fail-fast: false
+            matrix:
+                platform: [macos-latest, ubuntu-22.04, windows-latest]
+
+        runs-on: ${{ matrix.platform }}
+        steps:
+            - uses: actions/checkout@v4
+
+            # Install Node & PNPM
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v3
+              with:
+                  version: 8
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: "pnpm"
+
+            # Install Rust
+            - name: Install Rust stable
+              uses: dtolnay/rust-toolchain@stable
+
+            # Install Linux Dependencies (Only runs on Ubuntu)
+            - name: Install dependencies (ubuntu only)
+              if: matrix.platform == 'ubuntu-22.04'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+            # Install Frontend Dependencies
+            - name: Install frontend dependencies
+              run: pnpm install
+
+            # Build the App!
+            - name: Build Tauri App
+              uses: tauri-apps/tauri-action@v0
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tagName: ${{ github.ref_name }} # Creates a GitHub release
+                  releaseName: "ClipDude v__VERSION__"
+                  releaseBody: "New release of ClipDude."
+                  releaseDraft: false
+                  prerelease: false
