@@ -2,18 +2,8 @@
 
 import { useState } from "react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { Button } from "./ui/button";
 import { Trash } from "lucide-react";
-
-type ClipItemProps = {
-    clip: {
-        id: string | number;
-        content: string;
-    };
-    index: number;
-    onInternalCopy: (text: string) => Promise<void>;
-    onDelete: (id: string | number) => void;
-};
+import { ClipItemProps } from "@/types";
 
 export default function ClipItem({
     clip,
@@ -42,51 +32,43 @@ export default function ClipItem({
         onDelete(clip.id);
     };
 
-    const toggleAccordion = () => {
-        setIsOpen((prev) => !prev);
-    };
-
     return (
         <div
-            className={`w-full border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm transition-all${
+            className={`w-full rounded-2xl border border-border bg-background shadow-sm transition-colors ${
                 isOpen ? "pb-2" : ""
             }`}
         >
             <div className="flex items-center justify-between pr-4">
-                <Button
-                    variant="ghost"
-                    onClick={toggleAccordion}
+                <button
+                    onClick={() => setIsOpen((prev) => !prev)}
                     className="flex-1 rounded-2xl px-4 py-4 text-left"
                     aria-expanded={isOpen}
                 >
                     <div className="flex items-center gap-4 w-full">
-                        <span className="text-[10px] font-bold  w-6 shrink-0">
+                        <span className="text-[10px] font-bold text-muted-foreground w-6 shrink-0">
                             {index}.
                         </span>
 
-                        <h3 className="text-sm font-bold tracking-tight truncate w-[120px] sm:w-32 md:w-64 dark:text-zinc-200">
+                        <h3 className="text-sm font-bold tracking-tight truncate w-30 sm:w-32 md:w-64 text-foreground">
                             {title}
                         </h3>
                     </div>
-                </Button>
+                </button>
 
-                {/* Action Buttons */}
                 <div className="flex items-center gap-2 shrink-0">
-                    <Button
+                    <button
                         onClick={doDelete}
-                        variant="destructive"
-                        size="icon"
-                        className="bg-none"
+                        className="p-2 text-muted-foreground hover:text-destructive transition-colors"
                     >
-                        <Trash />
-                    </Button>
+                        <Trash className="w-4 h-4" />
+                    </button>
 
                     <button
                         onClick={doCopy}
-                        className={`text-[9px] font-black px-4 py-2 rounded-full transition-all tracking-widest uppercase cursor-pointer ${
+                        className={`text-[9px] font-black px-4 py-2 rounded-full tracking-widest uppercase cursor-pointer transition-colors border border-border ${
                             copied
                                 ? "bg-emerald-500 text-white"
-                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                                : "text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10"
                         }`}
                     >
                         {copied ? "COPIED" : "Copy"}
@@ -94,9 +76,8 @@ export default function ClipItem({
                 </div>
             </div>
 
-            {/* Custom Accordion Content */}
             <div
-                className={`grid transition-all duration-300 ease-in-out ${
+                className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
                     isOpen
                         ? "grid-rows-[1fr] opacity-100"
                         : "grid-rows-[0fr] opacity-0"
@@ -104,8 +85,8 @@ export default function ClipItem({
             >
                 <div className="overflow-hidden">
                     <div className="px-4 pb-4">
-                        <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
-                            <pre className="text-[11px] font-mono whitespace-pre-wrap break-all leading-relaxed text-zinc-500 dark:text-zinc-400 max-h-96 overflow-y-auto custom-scrollbar">
+                        <div className="p-4 rounded-xl bg-secondary border border-border transition-colors">
+                            <pre className="text-[11px] font-mono whitespace-pre-wrap break-all leading-relaxed text-muted-foreground max-h-96 overflow-y-auto custom-scrollbar">
                                 {clip.content}
                             </pre>
                         </div>

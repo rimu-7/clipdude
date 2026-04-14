@@ -1,11 +1,8 @@
-import { Clip } from "../App";
+"use client";
+
+import { ChevronDown } from "lucide-react";
 import ClipItem from "./ClipItem";
-import {
-    Accordion,
-    AccordionContent,
-    AccordionItem,
-    AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Clip, GroupAccordionProps } from "../types"; // FIX: Imported 'Clip' and fixed path
 
 export default function GroupAccordion({
     group,
@@ -13,47 +10,62 @@ export default function GroupAccordion({
     totalHistoryLength,
     onInternalCopy,
     onDelete,
-}: any) {
+    isOpen,
+    onToggle,
+}: GroupAccordionProps) {
     const startNum = totalHistoryLength - groupIndex * 20;
     const endNum = Math.max(
         totalHistoryLength - (groupIndex * 20 + group.length - 1),
         1,
     );
-    const batchId = `batch-${groupIndex}`;
 
     return (
-        <Accordion
-            type="single"
-            collapsible
-            defaultValue={groupIndex === 0 ? batchId : undefined}
-            className="w-full mb-4 bg-zinc-50 dark:bg-zinc-900/30 border border-zinc-200 dark:border-zinc-800 rounded-3xl"
-        >
-            <AccordionItem value={batchId} className="border-b-0 px-6">
-                <AccordionTrigger className="hover:no-underline text-[10px] font-black uppercase tracking-[0.3em] text-ring py-5">
+        <section className="w-full mb-4 border border-border rounded-3xl bg-secondary/70 backdrop-blur-sm transition-colors duration-200 hover:bg-secondary">
+            {/* Header */}
+            <button
+                onClick={onToggle}
+                aria-expanded={isOpen}
+                className="w-full px-6 py-5 flex items-center justify-between text-left group cursor-pointer"
+            >
+                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-ring">
                     Batch {groupIndex + 1} • ({startNum}-{endNum})
-                </AccordionTrigger>
+                </span>
 
-                {/* FIX: Ensure the content can grow naturally without getting clipped */}
-                <AccordionContent className="pb-6">
-                    <Accordion
-                        type="single"
-                        collapsible
-                        className="w-full space-y-3 px-2 flex flex-col"
-                    >
-                        {group.map((clip: Clip, idx: number) => (
-                            <ClipItem
-                                key={clip.id}
-                                clip={clip}
-                                index={
-                                    totalHistoryLength - (groupIndex * 20 + idx)
-                                }
-                                onInternalCopy={onInternalCopy}
-                                onDelete={onDelete}
-                            />
-                        ))}
-                    </Accordion>
-                </AccordionContent>
-            </AccordionItem>
-        </Accordion>
+                <ChevronDown
+                    className={`w-4 h-4 text-muted-foreground transition-transform duration-300 ${
+                        isOpen ? "rotate-180" : "rotate-0"
+                    }`}
+                />
+            </button>
+
+            {/* Content */}
+            <div
+                className={`grid transition-[grid-template-rows,opacity] duration-300 ease-in-out ${
+                    isOpen
+                        ? "grid-rows-[1fr] opacity-100"
+                        : "grid-rows-[0fr] opacity-0"
+                }`}
+            >
+                <div className="overflow-hidden">
+                    <div className="px-6 pb-6">
+                        <div className="space-y-3">
+                            {/* FIX: Changed clip: ClipProps to clip: Clip */}
+                            {group.map((clip: Clip, idx: number) => (
+                                <ClipItem
+                                    key={clip.id}
+                                    clip={clip}
+                                    index={
+                                        totalHistoryLength -
+                                        (groupIndex * 20 + idx)
+                                    }
+                                    onInternalCopy={onInternalCopy}
+                                    onDelete={onDelete}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
     );
 }
