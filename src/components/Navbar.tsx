@@ -17,9 +17,12 @@ export default function Navbar({
         <header className="flex justify-between items-center py-6 border-b border-zinc-100 dark:border-zinc-900 sticky top-0 backdrop-blur-md z-50">
             <div className="flex items-center gap-2">
                 <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
-                <h1 className="text-xl font-black tracking-tighter italic uppercase select-none text-zinc-900 dark:text-zinc-100">
+                <a
+                    href="/"
+                    className="text-xl font-black tracking-tighter italic uppercase select-none hover:text-emerald-500"
+                >
                     ClipDude
-                </h1>
+                </a>
             </div>
 
             <div className="flex items-center gap-2">

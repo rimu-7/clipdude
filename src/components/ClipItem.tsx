@@ -1,106 +1,117 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { ask } from "@tauri-apps/plugin-dialog";
-import { Copy, Check, Trash2 } from "lucide-react";
-import Button from "./ui/Button";
-import { Clip } from "../App";
+"use client";
 
-interface ClipItemProps {
-    clip: Clip;
+import { useState } from "react";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { Button } from "./ui/button";
+import { Trash } from "lucide-react";
+
+type ClipItemProps = {
+    clip: {
+        id: string | number;
+        content: string;
+    };
     index: number;
-    onInternalCopy: (t: string) => void;
-    onDeleteClip: (id: number) => void;
-}
+    onInternalCopy: (text: string) => Promise<void>;
+    onDelete: (id: string | number) => void;
+};
 
 export default function ClipItem({
     clip,
     index,
     onInternalCopy,
-    onDeleteClip,
+    onDelete,
 }: ClipItemProps) {
-    const [isOpen, setIsOpen] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
 
     const title =
-        clip.content.replace(/\s+/g, " ").trim().substring(0, 15) +
-        (clip.content.length > 15 ? "..." : "");
+        clip.content.replace(/\s+/g, " ").trim().substring(0, 40) +
+        (clip.content.length > 40 ? "..." : "");
 
-    const doCopy = async (e: React.MouseEvent) => {
+    const doCopy = async (e: React.MouseEvent<HTMLButtonElement>) => {
         e.stopPropagation();
         await writeText(clip.content);
         setCopied(true);
         await onInternalCopy(clip.content);
+
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const doDelete = async (e: React.MouseEvent) => {
+    const doDelete = (e: React.MouseEvent<HTMLButtonElement>) => {
         e.stopPropagation();
-        const confirmed = await ask(
-            "Are you sure you want to delete this clip?",
-            { title: "Delete Clip", kind: "warning" },
-        );
-        if (confirmed) onDeleteClip(clip.id);
+        onDelete(clip.id);
+    };
+
+    const toggleAccordion = () => {
+        setIsOpen((prev) => !prev);
     };
 
     return (
-        <motion.div
-            layout
-            className="border border-zinc-200 dark:border-zinc-800 hover:border-emerald-300 dark:hover:border-emerald-700/50 rounded-xl overflow-hidden duration-300 shadow-sm bg-zinc-50 dark:bg-zinc-800/20"
+        <div
+            className={`w-full border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm transition-all${
+                isOpen ? "pb-2" : ""
+            }`}
         >
-            <div
-                className="p-3 pl-4 flex items-center justify-between cursor-pointer active:bg-zinc-100 dark:active:bg-zinc-800"
-                onClick={() => setIsOpen(!isOpen)}
-            >
-                <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-bold text-zinc-400 w-6">
-                        {index}.
-                    </span>
-                    <h3 className="text-sm font-semibold tracking-tight truncate w-32 md:w-56 text-zinc-900 dark:text-zinc-200">
-                        {title}
-                    </h3>
-                </div>
-                <div className="flex items-center gap-1">
+            <div className="flex items-center justify-between pr-4">
+                <Button
+                    variant="ghost"
+                    onClick={toggleAccordion}
+                    className="flex-1 rounded-2xl px-4 py-4 text-left"
+                    aria-expanded={isOpen}
+                >
+                    <div className="flex items-center gap-4 w-full">
+                        <span className="text-[10px] font-bold  w-6 shrink-0">
+                            {index}.
+                        </span>
+
+                        <h3 className="text-sm font-bold tracking-tight truncate w-[120px] sm:w-32 md:w-64 dark:text-zinc-200">
+                            {title}
+                        </h3>
+                    </div>
+                </Button>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2 shrink-0">
                     <Button
-                        variant="ghost"
-                        size="icon"
                         onClick={doDelete}
-                        className="text-zinc-400 hover:text-red-500"
+                        variant="destructive"
+                        size="icon"
+                        className="bg-none"
                     >
-                        <Trash2 size={14} />
+                        <Trash />
                     </Button>
-                    <Button
-                        variant={copied ? "primary" : "outline"}
-                        size="sm"
+
+                    <button
                         onClick={doCopy}
-                        icon={copied ? <Check size={12} /> : <Copy size={12} />}
+                        className={`text-[9px] font-black px-4 py-2 rounded-full transition-all tracking-widest uppercase cursor-pointer ${
+                            copied
+                                ? "bg-emerald-500 text-white"
+                                : "bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                        }`}
                     >
-                        {copied ? "Copied" : "Copy"}
-                    </Button>
+                        {copied ? "COPIED" : "Copy"}
+                    </button>
                 </div>
             </div>
 
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="px-4 pb-4"
-                    >
-                        <div className="p-3 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 overflow-x-auto mt-2">
-                            <pre className="text-[11px] font-mono whitespace-pre-wrap break-all leading-relaxed text-zinc-700 dark:text-zinc-300">
+            {/* Custom Accordion Content */}
+            <div
+                className={`grid transition-all duration-300 ease-in-out ${
+                    isOpen
+                        ? "grid-rows-[1fr] opacity-100"
+                        : "grid-rows-[0fr] opacity-0"
+                }`}
+            >
+                <div className="overflow-hidden">
+                    <div className="px-4 pb-4">
+                        <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                            <pre className="text-[11px] font-mono whitespace-pre-wrap break-all leading-relaxed text-zinc-500 dark:text-zinc-400 max-h-96 overflow-y-auto custom-scrollbar">
                                 {clip.content}
                             </pre>
                         </div>
-                        {clip.created_at && (
-                            <div className="mt-2 text-[9px] text-zinc-400 text-right uppercase tracking-widest">
-                                {new Date(clip.created_at).toLocaleString()}
-                            </div>
-                        )}
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </motion.div>
+                    </div>
+                </div>
+            </div>
+        </div>
     );
 }
