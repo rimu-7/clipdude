@@ -1,35 +1,164 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "clipdude",
+
+  "productName": "ClipDude",
   "version": "0.1.0",
   "identifier": "com.walter.clipdude",
+
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
+
   "app": {
+    "macOSPrivateApi": true,
+
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "img-src": "'self' asset: https: data: blob:",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self' data:",
+        "script-src": "'self' 'unsafe-eval'",
+        "connect-src": "'self' ipc: http://ipc.localhost ws: wss: https:",
+        "media-src": "'self' blob: data:"
+      }
+    },
+
     "windows": [
       {
-        "title": "clipdude",
-        "width": 800,
-        "height": 600
+        "label": "main",
+
+        "title": "ClipDude",
+
+        "width": 920,
+        "height": 640,
+
+        "minWidth": 700,
+        "minHeight": 520,
+
+        "maximizable": false,
+        "minimizable": true,
+        "closable": true,
+        "resizable": true,
+
+        "fullscreen": false,
+
+        "center": true,
+
+        "visible": false,
+        "focus": false,
+
+        "transparent": true,
+        "decorations": false,
+        "shadow": true,
+
+        "alwaysOnTop": true,
+
+        "skipTaskbar": true,
+
+        "dragDropEnabled": true,
+
+        "theme": "Dark",
+
+        "windowEffects": {
+          "effects": ["mica", "acrylic", "blur", "hudWindow"],
+          "radius": 14,
+          "state": "active"
+        }
       }
-    ],
-    "security": {
-      "csp": null
-    }
+    ]
   },
+
   "bundle": {
     "active": true,
-    "targets": "all",
+
+    "targets": ["app", "dmg", "nsis", "deb", "rpm", "appimage"],
+
+    "createUpdaterArtifacts": true,
+
+    "publisher": "Walter",
+
+    "category": "Utility",
+
+    "shortDescription": "A blazing-fast native clipboard manager.",
+
+    "longDescription": "ClipDude is a blazing-fast, secure, and fully native clipboard manager built with Tauri, designed for macOS, Windows, Linux, and Android.",
+
+    "copyright": "© 2026 Walter",
+
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+
+    "resources": [],
+
+    "externalBin": [],
+
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+
+      "entitlements": null,
+
+      "exceptionDomain": "",
+
+      "frameworks": [],
+
+      "signingIdentity": null,
+
+      "providerShortName": null
+    },
+
+    "windows": {
+      "digestAlgorithm": "sha256",
+
+      "timestampUrl": "http://timestamp.digicert.com",
+
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+
+      "nsis": {
+        "installMode": "currentUser",
+
+        "displayLanguageSelector": false,
+
+        "compression": "lzma",
+
+        "installerIcon": "icons/icon.ico"
+      }
+    },
+
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      },
+
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1"
+        ]
+      }
+    },
+
+    "android": {
+      "minSdkVersion": 24
+    }
+  },
+
+  "plugins": {
+    "updater": {
+      "active": true,
+      "dialog": true,
+      "pubkey": ""
+    }
   }
 }

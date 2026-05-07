@@ -1,55 +1,132 @@
 name: Release ClipDude
 
 on:
-    push:
-        tags:
-            - "v*" # Triggers when you push a tag like v1.0.0
+  push:
+    tags:
+      - "v*" # Triggers when you push a tag like v1.0.0
+  workflow_dispatch: # Allows manual triggering from the Actions tab
 
 jobs:
-    build-tauri:
-        strategy:
-            fail-fast: false
-            matrix:
-                platform: [macos-latest, ubuntu-22.04, windows-latest]
+  # ==========================================
+  # JOB 1: BUILD DESKTOP (.dmg, .AppImage, .exe)
+  # ==========================================
+  build-desktop:
+    permissions:
+      contents: write # Required to create the GitHub release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin" # Compiles natively for Apple Silicon
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin" # Compiles for Intel Macs
+          - platform: ubuntu-22.04
+            args: ""
+          - platform: windows-latest
+            args: ""
 
-        runs-on: ${{ matrix.platform }}
-        steps:
-            - uses: actions/checkout@v4
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
 
-            # Install Node & PNPM
-            - name: Setup pnpm
-              uses: pnpm/action-setup@v3
-              with:
-                  version: 8
-            - name: Setup Node
-              uses: actions/setup-node@v4
-              with:
-                  node-version: 24
-                  cache: "pnpm"
+      # Install Node & PNPM
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
 
-            # Install Rust
-            - name: Install Rust stable
-              uses: dtolnay/rust-toolchain@stable
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "pnpm"
 
-            # Install Linux Dependencies (Only runs on Ubuntu)
-            - name: Install dependencies (ubuntu only)
-              if: matrix.platform == 'ubuntu-22.04'
-              run: |
-                  sudo apt-get update
-                  sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      # Install Rust
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Ensure macOS runners have the correct compilation targets
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-            # Install Frontend Dependencies
-            - name: Install frontend dependencies
-              run: pnpm install
+      # Install Linux Dependencies (Only runs on Ubuntu)
+      - name: Install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-            # Build the App!
-            - name: Build Tauri App
-              uses: tauri-apps/tauri-action@v0
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                  tagName: ${{ github.ref_name }} # Creates a GitHub release
-                  releaseName: "ClipDude v__VERSION__"
-                  releaseBody: "New release of ClipDude."
-                  releaseDraft: false
-                  prerelease: false
+      # Install Frontend Dependencies
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      # Build the Desktop App!
+      - name: Build Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "ClipDude ${{ github.ref_name }}"
+          releaseBody: "New release of ClipDude."
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
+
+  # ==========================================
+  # JOB 2: BUILD ANDROID (.apk)
+  # ==========================================
+  build-android:
+    needs: build-desktop # Waits for the desktop job to create the Release first
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      # Java is required for the Android SDK
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      # Android SDK setup
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # Rust targets specifically for Android compilation
+      - name: Install Rust & Android Targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      # NDK is required to bridge Rust and Android
+      - name: Install Cargo NDK
+        run: cargo install cargo-ndk
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      # Generate the APK via Tauri CLI using pnpm
+      - name: Build APK
+        run: pnpm tauri android build --apk
+
+      # Upload the finished APK to the exact same GitHub Release created above
+      - name: Upload APK to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
