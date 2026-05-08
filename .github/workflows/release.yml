@@ -124,7 +124,9 @@ jobs:
 
       # Generate the APK via Tauri CLI using pnpm
       - name: Build APK
-        run: pnpm tauri android build --apk
+        run: |
+          pnpm tauri android init
+          pnpm tauri android build --apk
 
       # Upload the finished APK to the exact same GitHub Release created above
       - name: Upload APK to Release
