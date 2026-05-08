@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { exit } from "@tauri-apps/plugin-process";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { Switch } from "@/components/ui/switch";
+
 
 export default function SettingsPage({
   dbPath,
