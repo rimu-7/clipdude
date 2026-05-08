@@ -158,7 +158,10 @@
     "updater": {
       "active": true,
       "dialog": true,
-      "pubkey": ""
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI2QjdDQ0ZDREJENkZGOEEKUldTSy85YmIvTXkzSm0rdGp5cHNEWVBvMDJqYVp3U0V0QnAyNllab3NjRWZBODlzUUlqcEJ1ZVgK",
+      "endpoints": [
+      "https://github.com/rimu-7/clipdude/releases/latest/download/updater.json"
+    ]
     }
   }
 }
