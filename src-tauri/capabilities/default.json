@@ -13,6 +13,14 @@
     "sql:allow-load",
     "sql:allow-execute",
     "sql:allow-select",
-    "process:default"
+    "process:default",
+    "fs:default",
+    "fs:allow-exists",
+    "fs:allow-mkdir",
+    "fs:allow-read-dir",
+    "shell:allow-execute",
+    "shell:allow-spawn",
+    "notification:default",
+    "os:default"
   ]
 }

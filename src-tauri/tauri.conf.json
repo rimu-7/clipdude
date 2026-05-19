@@ -30,65 +30,40 @@
     "windows": [
       {
         "label": "main",
-
         "title": "ClipDude",
-
         "width": 920,
         "height": 640,
-
         "minWidth": 700,
         "minHeight": 520,
-
-        "maximizable": false,
+        "maximizable": true,
         "minimizable": true,
         "closable": true,
         "resizable": true,
-
         "fullscreen": false,
-
         "center": true,
-
-        "visible": false,
-        "focus": false,
-
-        "transparent": true,
-        "decorations": false,
+        "visible": true,
+        "focus": true,
+        "transparent": false,
+        "decorations": true,
         "shadow": true,
-
-        "alwaysOnTop": true,
-
-        "skipTaskbar": true,
-
+        "alwaysOnTop": false,
+        "skipTaskbar": false,
         "dragDropEnabled": true,
-
         "theme": "Dark",
-
-        "windowEffects": {
-          "effects": ["mica", "acrylic", "blur", "hudWindow"],
-          "radius": 14,
-          "state": "active"
-        }
+        "windowEffects": null
       }
     ]
   },
 
   "bundle": {
     "active": true,
-
-    "targets": ["app", "dmg", "nsis", "deb", "rpm", "appimage"],
-
-    "createUpdaterArtifacts": true,
-
+    "targets": "all",
+    "createUpdaterArtifacts": false,
     "publisher": "Walter",
-
     "category": "Utility",
-
     "shortDescription": "A blazing-fast native clipboard manager.",
-
     "longDescription": "ClipDude is a blazing-fast, secure, and fully native clipboard manager built with Tauri, designed for macOS, Windows, Linux, and Android.",
-
     "copyright": "© 2026 Walter",
-
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -96,50 +71,33 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-
     "resources": [],
-
     "externalBin": [],
-
     "macOS": {
       "minimumSystemVersion": "10.15",
-
       "entitlements": null,
-
       "exceptionDomain": "",
-
       "frameworks": [],
-
       "signingIdentity": null,
-
       "providerShortName": null
     },
-
     "windows": {
       "digestAlgorithm": "sha256",
-
       "timestampUrl": "http://timestamp.digicert.com",
-
       "webviewInstallMode": {
         "type": "downloadBootstrapper"
       },
-
       "nsis": {
         "installMode": "currentUser",
-
         "displayLanguageSelector": false,
-
         "compression": "lzma",
-
         "installerIcon": "icons/icon.ico"
       }
     },
-
     "linux": {
       "appimage": {
         "bundleMediaFramework": true
       },
-
       "deb": {
         "depends": [
           "libwebkit2gtk-4.1-0",
@@ -148,7 +106,6 @@
         ]
       }
     },
-
     "android": {
       "minSdkVersion": 24
     }
@@ -160,8 +117,8 @@
       "dialog": true,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI2QjdDQ0ZDREJENkZGOEEKUldTSy85YmIvTXkzSm0rdGp5cHNEWVBvMDJqYVp3U0V0QnAyNllab3NjRWZBODlzUUlqcEJ1ZVgK",
       "endpoints": [
-      "https://github.com/rimu-7/clipdude/releases/latest/download/updater.json"
-    ]
+        "https://github.com/rimu-7/clipdude/releases/latest/download/updater.json"
+      ]
     }
   }
 }

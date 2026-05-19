@@ -199,13 +199,54 @@
       "rlig" 1,
       "calt" 1;
   }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
 }
 
-/* Custom Scrollbar */
 pre::-webkit-scrollbar {
   width: 4px;
 }
 pre::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: var(--muted-foreground);
   border-radius: 10px;
+  opacity: 0.3;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  border-radius: 10px;
+  opacity: 0.3;
+}
+::-webkit-scrollbar-thumb:hover {
+  opacity: 0.5;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--muted);
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: 2px solid var(--background);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }

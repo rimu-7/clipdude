@@ -3,135 +3,169 @@ name: Release ClipDude
 on:
   push:
     tags:
-      - "v*" # Triggers when you push a tag like v1.0.0
-  workflow_dispatch: # Allows manual triggering from the Actions tab
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  # ==========================================
-  # JOB 1: BUILD DESKTOP (.dmg, .AppImage, .exe)
-  # ==========================================
   build-desktop:
     permissions:
-      contents: write # Required to create the GitHub release
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - platform: macos-latest
-            args: "--target aarch64-apple-darwin" # Compiles natively for Apple Silicon
+            args: "--target aarch64-apple-darwin"
+            name: macos-aarch64
           - platform: macos-latest
-            args: "--target x86_64-apple-darwin" # Compiles for Intel Macs
+            args: "--target x86_64-apple-darwin"
+            name: macos-x86_64
           - platform: ubuntu-22.04
             args: ""
+            name: linux
           - platform: windows-latest
             args: ""
+            name: windows
 
     runs-on: ${{ matrix.platform }}
+    name: Build ${{ matrix.name }}
+
     steps:
       - uses: actions/checkout@v4
 
-      # Install Node & PNPM
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: 9
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: "pnpm"
 
-      # Install Rust
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          # Ensure macOS runners have the correct compilation targets
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      # Install Linux Dependencies (Only runs on Ubuntu)
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
       - name: Install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libxdo-dev
 
-      # Install Frontend Dependencies
       - name: Install frontend dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
-      # Build the Desktop App!
+      - name: Enable updater artifacts for CI
+        run: node -e "const fs=require('fs'),p='src-tauri/tauri.conf.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.bundle.createUpdaterArtifacts=true;fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n')"
+
       - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Signing keys for the Auto-Updater (Passed as env variables)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "ClipDude ${{ github.ref_name }}"
-          releaseBody: "New release of ClipDude."
+          releaseBody: |
+            ## ClipDude ${{ github.ref_name }}
+
+            ### Downloads
+            - **macOS**: `.dmg` (Apple Silicon & Intel)
+            - **Windows**: `.exe` (NSIS installer)
+            - **Linux**: `.deb`, `.rpm`, `.AppImage`
+            - **Android**: `.apk` (universal)
+
+            ### How to Install
+            - **macOS**: Download the `.dmg`, open it, drag ClipDude to Applications.
+            - **Windows**: Download the `.exe` installer and run it.
+            - **Linux**: Install the `.deb` with `sudo dpkg -i`, or make the `.AppImage` executable and run it.
+            - **Android**: Download the `.apk` and install it (you may need to enable "Install from unknown sources").
+
+            ### Keyboard Shortcuts
+            - **macOS**: `⌘ + Shift + V` to toggle window
+            - **Windows/Linux**: `Ctrl + Shift + V` to toggle window
+            - **Search**: `⌘/Ctrl + K` to focus search
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
 
-  # ==========================================
-  # JOB 2: BUILD ANDROID (.apk)
-  # ==========================================
   build-android:
-    needs: build-desktop # Waits for the desktop job to create the Release first
+    needs: build-desktop
     permissions:
       contents: write
     runs-on: ubuntu-latest
+    name: Build Android APK
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v3
+        uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: 9
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: "pnpm"
 
-      # Java is required for the Android SDK
       - name: Install Java
         uses: actions/setup-java@v4
         with:
           distribution: "zulu"
           java-version: "17"
 
-      # Android SDK setup
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Rust targets specifically for Android compilation
+      - name: Set NDK_HOME
+        run: echo "NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+
       - name: Install Rust & Android Targets
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
 
-      # NDK is required to bridge Rust and Android
       - name: Install Cargo NDK
         run: cargo install cargo-ndk
 
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
       - name: Install frontend dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
-      # Generate the APK via Tauri CLI using pnpm
+      - name: Initialize Android project
+        run: pnpm tauri android init
+
       - name: Build APK
-        run: |
-          pnpm tauri android init
-          pnpm tauri android build --apk
+        run: pnpm tauri android build --apk
 
-      # Upload the finished APK to the exact same GitHub Release created above
+      - name: Find APK
+        id: find_apk
+        run: |
+          APK_PATH=$(find src-tauri/gen/android -name "*.apk" -path "*/release/*" | head -1)
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "Found APK: $APK_PATH"
+
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          files: |
-            src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
+          files: ${{ steps.find_apk.outputs.apk_path }}
