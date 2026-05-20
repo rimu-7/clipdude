@@ -86,7 +86,7 @@ jobs:
             - **macOS**: `.dmg` (Apple Silicon & Intel)
             - **Windows**: `.exe` (NSIS installer)
             - **Linux**: `.deb`, `.rpm`, `.AppImage`
-            - **Android**: `.apk` (universal)
+            - **Android**: `.apk` (arm64 for most devices, armv7 for older devices)
 
             ### How to Install
             - **macOS**: Download the `.dmg`, open it, drag ClipDude to Applications.
@@ -138,7 +138,7 @@ jobs:
       - name: Install Rust & Android Targets
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi
 
       - name: Install Cargo NDK
         run: cargo install cargo-ndk
@@ -154,18 +154,82 @@ jobs:
       - name: Initialize Android project
         run: pnpm tauri android init
 
+      - name: Generate signing keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore src-tauri/gen/android/release.keystore \
+            -alias clipdude \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=ClipDude,O=Walter,C=US"
+
+      - name: Configure Android signing & ABI splits
+        run: |
+          cd src-tauri/gen/android
+          node -e "
+          const fs = require('fs');
+          let g = fs.readFileSync('app/build.gradle.kts', 'utf8');
+
+          g = g.replace(
+            /^(android \{)/m,
+            \`signingConfigs {
+              create(\"release\") {
+                storeFile = file(\"../release.keystore\")
+                storePassword = \"android\"
+                keyAlias = \"clipdude\"
+                keyPassword = \"android\"
+              }
+            }
+
+            \$1\`
+          );
+
+          g = g.replace(
+            /(getByName\(\"release\")\s*\{)/,
+            '\$1\n            signingConfig = signingConfigs.getByName(\"release\")'
+          );
+
+          g = g.replace(
+            /(\n\s*buildTypes)/,
+            \`
+              splits {
+                  abi {
+                      isEnable = true
+                      reset()
+                      include(\"arm64-v8a\", \"armeabi-v7a\")
+                      isUniversalApk = false
+                  }
+              }
+          \$1\`
+          );
+
+          fs.writeFileSync('app/build.gradle.kts', g);
+          console.log('Configured signing & ABI splits');
+          "
+
       - name: Build APK
         run: pnpm tauri android build --apk
 
-      - name: Find APK
+      - name: Find & rename APKs
         id: find_apk
         run: |
-          APK_PATH=$(find src-tauri/gen/android -name "*.apk" -path "*/release/*" | head -1)
-          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "Found APK: $APK_PATH"
+          mkdir -p apks
+          find src-tauri/gen/android -name "*.apk" -path "*/release/*" | while read f; do
+            name=$(basename "$f")
+            size=$(du -h "$f" | cut -f1)
+            echo "Found: $name ($size)"
+            if echo "$name" | grep -q "arm64-v8a"; then
+              cp "$f" "apks/ClipDude-arm64.apk"
+            elif echo "$name" | grep -q "armeabi-v7a"; then
+              cp "$f" "apks/ClipDude-armv7.apk"
+            else
+              cp "$f" "apks/ClipDude.apk"
+            fi
+          done
+          ls -la apks/
 
-      - name: Upload APK to Release
+      - name: Upload APKs to Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          files: ${{ steps.find_apk.outputs.apk_path }}
+          files: apks/*.apk
