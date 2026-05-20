@@ -4,27 +4,24 @@ const path = require('path');
 const gradlePath = path.join(__dirname, '..', 'src-tauri', 'gen', 'android', 'app', 'build.gradle.kts');
 let g = fs.readFileSync(gradlePath, 'utf8');
 
-const signingConfig = `signingConfigs {
-    create("release") {
-        storeFile = file("../release.keystore")
-        storePassword = "android"
-        keyAlias = "clipdude"
-        keyPassword = "android"
-    }
-}
-
-`;
-
-g = signingConfig + g;
-
 g = g.replace(
   /(android\s*\{)/,
-  '$1'
+  `$1
+    signingConfigs {
+        create("release") {
+            storeFile = file("../release.keystore")
+            storePassword = "android"
+            keyAlias = "clipdude"
+            keyPassword = "android"
+        }
+    }
+`
 );
 
 g = g.replace(
   /(getByName\("release"\)\s*\{)/,
-  '$1\n            signingConfig = signingConfigs.getByName("release")'
+  `$1
+            signingConfig = signingConfigs.getByName("release")`
 );
 
 g = g.replace(
