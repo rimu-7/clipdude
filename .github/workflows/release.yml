@@ -164,48 +164,7 @@ jobs:
             -dname "CN=ClipDude,O=Walter,C=US"
 
       - name: Configure Android signing & ABI splits
-        run: |
-          cd src-tauri/gen/android
-          node -e "
-          const fs = require('fs');
-          let g = fs.readFileSync('app/build.gradle.kts', 'utf8');
-
-          g = g.replace(
-            /^(android \{)/m,
-            \`signingConfigs {
-              create(\"release\") {
-                storeFile = file(\"../release.keystore\")
-                storePassword = \"android\"
-                keyAlias = \"clipdude\"
-                keyPassword = \"android\"
-              }
-            }
-
-            \$1\`
-          );
-
-          g = g.replace(
-            /(getByName\(\"release\")\s*\{)/,
-            '\$1\n            signingConfig = signingConfigs.getByName(\"release\")'
-          );
-
-          g = g.replace(
-            /(\n\s*buildTypes)/,
-            \`
-              splits {
-                  abi {
-                      isEnable = true
-                      reset()
-                      include(\"arm64-v8a\", \"armeabi-v7a\")
-                      isUniversalApk = false
-                  }
-              }
-          \$1\`
-          );
-
-          fs.writeFileSync('app/build.gradle.kts', g);
-          console.log('Configured signing & ABI splits');
-          "
+        run: node scripts/configure-android.js
 
       - name: Build APK
         run: pnpm tauri android build --apk
