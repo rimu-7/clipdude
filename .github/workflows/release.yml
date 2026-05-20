@@ -164,7 +164,7 @@ jobs:
             -dname "CN=ClipDude,O=Walter,C=US"
 
       - name: Configure Android signing & ABI splits
-        run: node scripts/configure-android.js
+        run: node scripts/configure-android.cjs
 
       - name: Build APK
         run: pnpm tauri android build --apk
