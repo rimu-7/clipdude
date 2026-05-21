@@ -172,7 +172,7 @@ jobs:
           cat src-tauri/gen/android/app/build.gradle.kts
 
       - name: Build APK
-        run: pnpm tauri android build --apk --target aarch64-linux-android --target armv7-linux-androideabi
+        run: pnpm tauri android build --apk --target aarch64 --target armv7
 
       - name: Find & rename APKs
         id: find_apk
