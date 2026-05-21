@@ -24,6 +24,8 @@ g = g.replace(
             signingConfig = signingConfigs.getByName("release")`
 );
 
+g = g.replace(/ndk\s*\{[^}]*\}/g, '');
+
 g = g.replace(
   /(\n\s*buildTypes)/,
   `
@@ -32,7 +34,7 @@ g = g.replace(
             isEnable = true
             reset()
             include("arm64-v8a", "armeabi-v7a")
-            isUniversalApk = false
+            isUniversalApk = true
         }
     }
 $1`

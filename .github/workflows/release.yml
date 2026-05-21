@@ -132,13 +132,15 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Set NDK_HOME
-        run: echo "NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
+      - name: Install NDK
+        run: |
+          sdkmanager --install "ndk;27.0.12077973"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> $GITHUB_ENV
 
       - name: Install Rust & Android Targets
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
 
       - name: Install Cargo NDK
         run: cargo install cargo-ndk
@@ -164,15 +166,19 @@ jobs:
             -dname "CN=ClipDude,O=Walter,C=US"
 
       - name: Configure Android signing & ABI splits
-        run: node scripts/configure-android.cjs
+        run: |
+          node scripts/configure-android.cjs
+          echo "=== Modified build.gradle.kts ==="
+          cat src-tauri/gen/android/app/build.gradle.kts
 
       - name: Build APK
-        run: pnpm tauri android build --apk
+        run: pnpm tauri android build --apk --target aarch64-linux-android --target armv7-linux-androideabi
 
       - name: Find & rename APKs
         id: find_apk
         run: |
           mkdir -p apks
+          echo "Searching for APKs..."
           find src-tauri/gen/android -name "*.apk" -path "*/release/*" | while read f; do
             name=$(basename "$f")
             size=$(du -h "$f" | cut -f1)
@@ -185,7 +191,13 @@ jobs:
               cp "$f" "apks/ClipDude.apk"
             fi
           done
+          echo "--- APKs to upload ---"
           ls -la apks/
+          apk_count=$(ls apks/*.apk 2>/dev/null | wc -l)
+          if [ "$apk_count" -eq 0 ]; then
+            echo "ERROR: No APKs found!"
+            exit 1
+          fi
 
       - name: Upload APKs to Release
         uses: softprops/action-gh-release@v2

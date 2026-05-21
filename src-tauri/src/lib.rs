@@ -1,8 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::sync::{Arc, Mutex};
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager};
+
+use tauri::AppHandle;
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use tauri::{Emitter, Manager};
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_store::StoreExt;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -11,9 +19,11 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use tauri_plugin_positioner::{Position, WindowExt};
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 const MAIN_WINDOW_LABEL: &str = "main";
 
 struct AppState {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     last_clipboard_content: Mutex<String>,
     excluded_apps: Mutex<Vec<String>>,
     monitor_enabled: Mutex<bool>,
@@ -225,7 +235,10 @@ pub fn run() {
             set_excluded_apps,
             update_tray_tooltip,
         ])
-        .setup(move |app| {
+        .setup(move |_app| {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            let app = _app;
+
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 #[cfg(target_os = "macos")]
