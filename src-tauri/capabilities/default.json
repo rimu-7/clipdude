@@ -1,26 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Permissions for the main window. All data access goes through ClipDude's own commands.",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text",
-    "dialog:default",
-    "store:default",
-    "sql:default",
-    "sql:allow-load",
-    "sql:allow-execute",
-    "sql:allow-select",
-    "process:default",
-    "fs:default",
-    "fs:allow-exists",
-    "fs:allow-mkdir",
-    "fs:allow-read-dir",
-    "shell:allow-execute",
-    "shell:allow-spawn",
-    "notification:default",
-    "os:default"
-  ]
+  "permissions": ["core:default", "dialog:allow-open"]
 }

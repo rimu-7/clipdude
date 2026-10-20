@@ -70,6 +70,33 @@ jobs:
       - name: Enable updater artifacts for CI
         run: node -e "const fs=require('fs'),p='src-tauri/tauri.conf.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.bundle.createUpdaterArtifacts=true;fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n')"
 
+      - name: Set app version from tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME is not a version like v1.2.0"
+            exit 1
+          fi
+          node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('package.json','utf8'));j.version=process.argv[1];fs.writeFileSync('package.json',JSON.stringify(j,null,2)+'\n')" "$VERSION"
+          echo "Building ClipDude $VERSION"
+
+      # The text above the --- line is what ClipDude shows in its in-app update dialog.
+      - name: Prepare release notes
+        id: notes
+        shell: bash
+        run: |
+          {
+            echo 'body<<CLIPDUDE_NOTES_EOF'
+            if [ -s RELEASE_NOTES.md ]; then cat RELEASE_NOTES.md; else echo "Bug fixes and improvements."; fi
+            echo
+            echo '---'
+            echo
+            cat .github/release-footer.md
+            echo 'CLIPDUDE_NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
         env:
@@ -79,128 +106,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "ClipDude ${{ github.ref_name }}"
-          releaseBody: |
-            ## ClipDude ${{ github.ref_name }}
-
-            ### Downloads
-            - **macOS**: `.dmg` (Apple Silicon & Intel)
-            - **Windows**: `.exe` (NSIS installer)
-            - **Linux**: `.deb`, `.rpm`, `.AppImage`
-            - **Android**: `.apk` (arm64 for most devices, armv7 for older devices)
-
-            ### How to Install
-            - **macOS**: Download the `.dmg`, open it, drag ClipDude to Applications.
-            - **Windows**: Download the `.exe` installer and run it.
-            - **Linux**: Install the `.deb` with `sudo dpkg -i`, or make the `.AppImage` executable and run it.
-            - **Android**: Download the `.apk` and install it (you may need to enable "Install from unknown sources").
-
-            ### Keyboard Shortcuts
-            - **macOS**: `⌘ + Shift + V` to toggle window
-            - **Windows/Linux**: `Ctrl + Shift + V` to toggle window
-            - **Search**: `⌘/Ctrl + K` to focus search
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-
-  build-android:
-    needs: build-desktop
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    name: Build Android APK
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: "pnpm"
-
-      - name: Install Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: "zulu"
-          java-version: "17"
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install NDK
-        run: |
-          sdkmanager --install "ndk;27.0.12077973"
-          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> $GITHUB_ENV
-
-      - name: Install Rust & Android Targets
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
-
-      - name: Install Cargo NDK
-        run: cargo install cargo-ndk
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
-
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Initialize Android project
-        run: pnpm tauri android init
-
-      - name: Generate signing keystore
-        run: |
-          keytool -genkeypair -v \
-            -keystore src-tauri/gen/android/release.keystore \
-            -alias clipdude \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=ClipDude,O=Walter,C=US"
-
-      - name: Configure Android signing & ABI splits
-        run: |
-          node scripts/configure-android.cjs
-          echo "=== Modified build.gradle.kts ==="
-          cat src-tauri/gen/android/app/build.gradle.kts
-
-      - name: Build APK
-        run: pnpm tauri android build --apk --target aarch64 --target armv7
-
-      - name: Find & rename APKs
-        id: find_apk
-        run: |
-          mkdir -p apks
-          echo "Searching for APKs..."
-          find src-tauri/gen/android -name "*.apk" -path "*/release/*" | while read f; do
-            name=$(basename "$f")
-            size=$(du -h "$f" | cut -f1)
-            echo "Found: $name ($size)"
-            if echo "$name" | grep -q "arm64-v8a"; then
-              cp "$f" "apks/ClipDude-arm64.apk"
-            elif echo "$name" | grep -q "armeabi-v7a"; then
-              cp "$f" "apks/ClipDude-armv7.apk"
-            else
-              cp "$f" "apks/ClipDude.apk"
-            fi
-          done
-          echo "--- APKs to upload ---"
-          ls -la apks/
-          apk_count=$(ls apks/*.apk 2>/dev/null | wc -l)
-          if [ "$apk_count" -eq 0 ]; then
-            echo "ERROR: No APKs found!"
-            exit 1
-          fi
-
-      - name: Upload APKs to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: apks/*.apk

@@ -1,57 +1,43 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
-  ChevronDown, Copy, Trash2, Pin, PinOff, Shield, MoreHorizontal, ExternalLink,
+  ChevronDown, Copy, Trash2, Pin, PinOff, Shield, MoreHorizontal, CornerDownLeft,
 } from "lucide-react";
-import { type Clip } from "../types";
-import { type TextTransform } from "@/lib/textTransforms";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { detectSensitiveData } from "@/lib/privacy";
-import { TRANSFORM_LABELS, applyTransform } from "@/lib/textTransforms";
+import { TRANSFORM_LABELS, type TextTransform } from "@/lib/textTransforms";
+import type { Clip } from "@/types";
 
-interface GroupAccordionProps {
-  id: string;
+export interface ClipActions {
+  onActivate: (clip: Clip) => void;
+  onCopy: (clip: Clip) => void;
+  onTogglePin: (clip: Clip) => void;
+  onDelete: (clip: Clip) => void;
+  onTransform: (clip: Clip, kind: TextTransform) => void;
+}
+
+interface GroupAccordionProps extends ClipActions {
   title: string;
   icon?: React.ReactNode;
-  group: Clip[];
+  clips: Clip[];
+  /** Position of the first clip, for the "#n" labels. */
+  startIndex?: number;
   isOpen: boolean;
   onToggle: () => void;
-  onInternalCopy: (text: string) => void;
-  onDelete: (id: number) => void;
-  onTogglePin: (id: number, currentStatus: number) => void;
-  onCopyAndHide?: (clip: Clip) => void;
-  onTransform?: (clip: Clip, transformed: string) => void;
+  smartPaste: boolean;
+  showSourceApp: boolean;
 }
 
-function formatTime(dateStr: string): string {
-  try {
-    const d = new Date(dateStr + "Z");
-    return d.toLocaleString(undefined, {
-      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-    });
-  } catch { return dateStr; }
-}
+const timeFormat = new Intl.DateTimeFormat(undefined, {
+  month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+});
 
-function truncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  return text.substring(0, maxLen) + "…";
+function formatTime(ms: number): string {
+  return ms > 0 ? timeFormat.format(new Date(ms)) : "";
 }
 
 export default function GroupAccordion({
-  title, icon, group, isOpen, onToggle, onInternalCopy, onDelete, onTogglePin, onCopyAndHide, onTransform,
+  title, icon, clips, startIndex, isOpen, onToggle, smartPaste, showSourceApp, ...actions
 }: GroupAccordionProps) {
-  const handleCopy = async (text: string) => {
-    try {
-      await writeText(text);
-      onInternalCopy(text);
-      toast.success("Copied to clipboard!");
-    } catch {
-      toast.error("Failed to copy. Please try again.");
-    }
-  };
-
   return (
     <div className={cn(
       "overflow-hidden rounded-2xl border transition-all duration-300",
@@ -60,6 +46,7 @@ export default function GroupAccordion({
     )}>
       <button
         onClick={onToggle}
+        aria-expanded={isOpen}
         className={cn(
           "w-full flex items-center justify-between px-4 py-3 transition-colors duration-200",
           "hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
@@ -68,7 +55,7 @@ export default function GroupAccordion({
         <div className="flex items-center gap-2.5">
           {icon && <span className="shrink-0">{icon}</span>}
           <span className="font-mono text-[13px] uppercase tracking-wider font-bold text-foreground">{title}</span>
-          <span className="text-muted-foreground/70 font-mono text-xs tabular-nums">{group.length}</span>
+          <span className="text-muted-foreground/70 font-mono text-xs tabular-nums">{clips.length}</span>
         </div>
         <ChevronDown className={cn(
           "w-4 h-4 text-muted-foreground transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
@@ -82,19 +69,18 @@ export default function GroupAccordion({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ height: { duration: 0.3, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 0.2 } }}
+            transition={{ height: { duration: 0.25, ease: [0.16, 1, 0.3, 1] }, opacity: { duration: 0.15 } }}
             className="overflow-hidden"
           >
             <div className="px-2 pb-2 space-y-0.5">
-              {group.map((clip) => (
+              {clips.map((clip, i) => (
                 <ClipRow
                   key={clip.id}
                   clip={clip}
-                  onCopy={handleCopy}
-                  onDelete={onDelete}
-                  onTogglePin={onTogglePin}
-                  onCopyAndHide={onCopyAndHide}
-                  onTransform={onTransform}
+                  position={startIndex !== undefined ? startIndex + i : undefined}
+                  smartPaste={smartPaste}
+                  showSourceApp={showSourceApp}
+                  {...actions}
                 />
               ))}
             </div>
@@ -105,50 +91,45 @@ export default function GroupAccordion({
   );
 }
 
-function ClipRow({
-  clip, onCopy, onDelete, onTogglePin, onCopyAndHide, onTransform,
-}: {
-  clip: Clip;
-  onCopy: (text: string) => void;
-  onDelete: (id: number) => void;
-  onTogglePin: (id: number, status: number) => void;
-  onCopyAndHide?: (clip: Clip) => void;
-  onTransform?: (clip: Clip, transformed: string) => void;
-}) {
-  const isPinned = clip.is_pinned === 1;
-  const isSensitive = clip.is_sensitive === 1;
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+const ClipRow = memo(function ClipRow({
+  clip, position, smartPaste, showSourceApp, onActivate, onCopy, onTogglePin, onDelete, onTransform,
+}: ClipActions & { clip: Clip; position?: number; smartPaste: boolean; showSourceApp: boolean }) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const preview = clip.preview.replace(/\s+/g, " ").trim();
+  const truncated = clip.length > clip.preview.length;
 
-  const sensitiveInfo = isSensitive ? detectSensitiveData(clip.content) : null;
-  const displayContent = isSensitive && sensitiveInfo ? sensitiveInfo.maskedContent : clip.content;
-  const previewText = truncate(displayContent.replace(/\s+/g, " ").trim(), 200);
-
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+  const openMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    setMenu({ x: e.clientX, y: e.clientY });
   }, []);
 
   useEffect(() => {
-    if (!contextMenu) return;
-    const close = (e: MouseEvent | KeyboardEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setContextMenu(null);
-      if (e instanceof KeyboardEvent && e.key === "Escape") setContextMenu(null);
+    if (!menu) return;
+    const onPointer = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenu(null);
     };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", close);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", close); };
-  }, [contextMenu]);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setMenu(null);
+      }
+    };
+    const onBlur = () => setMenu(null);
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey, true);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [menu]);
 
-  const handleTransform = (transform: TextTransform) => {
-    const result = applyTransform(clip.content, transform);
-    if (result !== null && onTransform) {
-      onTransform(clip, result);
-    } else {
-      toast.error("Transform not applicable to this content.");
-    }
-    setContextMenu(null);
+  const run = (action: () => void) => () => {
+    setMenu(null);
+    action();
   };
 
   return (
@@ -159,130 +140,137 @@ function ClipRow({
         "hover:border-border/40 hover:bg-background/60",
         "focus-within:border-primary/30"
       )}
-      onContextMenu={handleContextMenu}
+      onContextMenu={openMenu}
     >
       <span className="text-[10px] font-mono font-bold text-muted-foreground/40 w-7 shrink-0 pt-[3px] tabular-nums select-none">
-        #{clip.rank || clip.id}
+        {position !== undefined ? `#${position}` : ""}
       </span>
 
       <div className="flex-1 min-w-0">
         <button
-          onClick={() => onCopyAndHide ? onCopyAndHide(clip) : onCopy(clip.content)}
-          className="w-full text-left"
-          title={onCopyAndHide ? "Click to copy and paste" : "Click to copy"}
+          onClick={() => onActivate(clip)}
+          className="w-full text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          title={smartPaste ? "Paste into the previous app" : "Copy"}
         >
-          <p className={cn(
-            "text-[13px] font-mono whitespace-pre-wrap break-all text-foreground/85 leading-relaxed",
-            "line-clamp-3 group-hover:line-clamp-5 transition-all duration-200"
-          )}>
-            {previewText}
+          <p className="text-[13px] font-mono whitespace-pre-wrap break-all text-foreground/85 leading-relaxed line-clamp-3 group-hover:line-clamp-5">
+            {preview}
+            {truncated && <span className="text-muted-foreground/50">…</span>}
           </p>
         </button>
         <div className="flex items-center gap-2 mt-1">
-          <p className="text-[10px] text-muted-foreground/40 font-mono tabular-nums">{formatTime(clip.created_at)}</p>
-          {clip.source_app && (
-            <span className="text-[9px] text-muted-foreground/30 font-mono truncate max-w-[120px]">{clip.source_app}</span>
+          <p className="text-[10px] text-muted-foreground/50 font-mono tabular-nums">{formatTime(clip.last_used)}</p>
+          {showSourceApp && clip.source_app && (
+            <span className="text-[9px] text-muted-foreground/40 font-mono truncate max-w-[160px]">{clip.source_app}</span>
           )}
-          {isSensitive && (
-            <span className="flex items-center gap-0.5 text-[9px] text-amber-500/70 font-mono">
+          {truncated && (
+            <span className="text-[9px] text-muted-foreground/40 font-mono tabular-nums">
+              {clip.length.toLocaleString()} chars
+            </span>
+          )}
+          {clip.is_sensitive && (
+            <span className="flex items-center gap-0.5 text-[9px] text-amber-500/80 font-mono">
               <Shield className="w-2.5 h-2.5" /> Sensitive
             </span>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shrink-0 pt-0.5">
-        {onCopyAndHide && (
-          <button
-            onClick={() => onCopyAndHide(clip)}
-            className="p-1.5 text-muted-foreground/60 hover:text-emerald-500 hover:bg-emerald-500/10 rounded-lg transition-colors duration-150"
-            title="Copy & Paste"
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </button>
+      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150 shrink-0 pt-0.5">
+        {smartPaste && (
+          <IconButton title="Paste" onClick={() => onActivate(clip)} className="hover:text-emerald-500 hover:bg-emerald-500/10">
+            <CornerDownLeft className="w-3.5 h-3.5" />
+          </IconButton>
         )}
-        <button
-          onClick={() => onCopy(clip.content)}
-          className="p-1.5 text-muted-foreground/60 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors duration-150"
-          title="Copy"
-        >
+        <IconButton title="Copy" onClick={() => onCopy(clip)} className="hover:text-primary hover:bg-primary/10">
           <Copy className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => onTogglePin(clip.id, clip.is_pinned)}
-          className={cn(
-            "p-1.5 rounded-lg transition-colors duration-150",
-            isPinned ? "text-primary hover:bg-primary/10" : "text-muted-foreground/60 hover:text-primary hover:bg-primary/10"
-          )}
-          title={isPinned ? "Unpin" : "Pin"}
+        </IconButton>
+        <IconButton
+          title={clip.is_pinned ? "Unpin" : "Pin"}
+          onClick={() => onTogglePin(clip)}
+          className={cn("hover:text-primary hover:bg-primary/10", clip.is_pinned && "text-primary")}
         >
-          {isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-        </button>
-        <button
-          onClick={() => onDelete(clip.id)}
-          className="p-1.5 text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors duration-150"
-          title="Delete"
-        >
+          {clip.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+        </IconButton>
+        <IconButton title="Delete" onClick={() => onDelete(clip)} className="hover:text-destructive hover:bg-destructive/10">
           <Trash2 className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={(e) => { e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY }); }}
-          className="p-1.5 text-muted-foreground/60 hover:text-foreground hover:bg-muted rounded-lg transition-colors duration-150"
-          title="More"
-        >
+        </IconButton>
+        <IconButton title="More" onClick={openMenu} className="hover:text-foreground hover:bg-muted">
           <MoreHorizontal className="w-3.5 h-3.5" />
-        </button>
+        </IconButton>
       </div>
 
       <AnimatePresence>
-        {contextMenu && (
+        {menu && (
           <motion.div
             ref={menuRef}
-            initial={{ opacity: 0, scale: 0.95 }}
+            role="menu"
+            initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.1 }}
+            exit={{ opacity: 0, scale: 0.97 }}
+            transition={{ duration: 0.08 }}
             className="fixed z-[999] min-w-[200px] max-h-[70vh] overflow-y-auto rounded-xl border border-border bg-popover/95 backdrop-blur-xl shadow-xl py-1"
             style={{
-              left: Math.min(contextMenu.x, window.innerWidth - 220),
-              top: Math.min(contextMenu.y, window.innerHeight - 400),
+              left: Math.max(8, Math.min(menu.x, window.innerWidth - 216)),
+              top: Math.max(8, Math.min(menu.y, window.innerHeight - 420)),
             }}
           >
-            {onCopyAndHide && (
-              <ContextMenuItem
-                icon={<ExternalLink className="w-3.5 h-3.5" />}
-                label="Copy & Paste"
-                shortcut="⌘⇧V"
-                onClick={() => { onCopyAndHide(clip); setContextMenu(null); }}
-              />
+            {smartPaste && (
+              <MenuItem icon={<CornerDownLeft className="w-3.5 h-3.5" />} label="Paste" onClick={run(() => onActivate(clip))} />
             )}
-            <ContextMenuItem icon={<Copy className="w-3.5 h-3.5" />} label="Copy" onClick={() => { onCopy(clip.content); setContextMenu(null); }} />
-            <ContextMenuItem
-              icon={isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
-              label={isPinned ? "Unpin" : "Pin"}
-              onClick={() => { onTogglePin(clip.id, clip.is_pinned); setContextMenu(null); }}
+            <MenuItem icon={<Copy className="w-3.5 h-3.5" />} label="Copy" onClick={run(() => onCopy(clip))} />
+            <MenuItem
+              icon={clip.is_pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+              label={clip.is_pinned ? "Unpin" : "Pin"}
+              onClick={run(() => onTogglePin(clip))}
             />
             <div className="h-px bg-border mx-2 my-1" />
-            <div className="px-3 py-1.5 text-[9px] font-mono uppercase tracking-widest text-muted-foreground/50">Transforms</div>
-            {(Object.entries(TRANSFORM_LABELS) as [TextTransform, string][]).map(([key, label]) => (
-              <ContextMenuItem key={key} label={label} onClick={() => handleTransform(key)} />
+            <div className="px-3 py-1.5 text-[9px] font-mono uppercase tracking-widest text-muted-foreground/50">
+              Copy as
+            </div>
+            {(Object.entries(TRANSFORM_LABELS) as [TextTransform, string][]).map(([kind, label]) => (
+              <MenuItem key={kind} label={label} onClick={run(() => onTransform(clip, kind))} />
             ))}
             <div className="h-px bg-border mx-2 my-1" />
-            <ContextMenuItem icon={<Trash2 className="w-3.5 h-3.5" />} label="Delete" destructive onClick={() => { onDelete(clip.id); setContextMenu(null); }} />
+            <MenuItem icon={<Trash2 className="w-3.5 h-3.5" />} label="Delete" destructive onClick={run(() => onDelete(clip))} />
           </motion.div>
         )}
       </AnimatePresence>
     </div>
   );
-}
+});
 
-function ContextMenuItem({
-  icon, label, shortcut, destructive, onClick,
+function IconButton({
+  title, onClick, className, children,
 }: {
-  icon?: React.ReactNode; label: string; shortcut?: string; destructive?: boolean; onClick: () => void;
+  title: string;
+  onClick: (e: React.MouseEvent) => void;
+  className?: string;
+  children: React.ReactNode;
 }) {
   return (
     <button
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={cn(
+        "p-1.5 text-muted-foreground/60 rounded-lg transition-colors duration-150",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MenuItem({
+  icon, label, destructive, onClick,
+}: {
+  icon?: React.ReactNode; label: string; destructive?: boolean; onClick: () => void;
+}) {
+  return (
+    <button
+      role="menuitem"
       onClick={onClick}
       className={cn(
         "w-full flex items-center gap-2.5 px-3 py-1.5 text-[12px] font-medium transition-colors duration-100",
@@ -291,7 +279,6 @@ function ContextMenuItem({
     >
       {icon && <span className="shrink-0">{icon}</span>}
       <span className="flex-1 text-left">{label}</span>
-      {shortcut && <span className="text-[10px] text-muted-foreground/50 font-mono">{shortcut}</span>}
     </button>
   );
 }

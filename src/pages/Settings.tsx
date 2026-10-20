@@ -1,502 +1,560 @@
-import { useEffect, useState, useCallback } from "react";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
-  BrushCleaning,
-  TriangleAlert,
-  Settings2,
-  Power,
-  Shield,
-  Plus,
-  X,
-  Database,
-  Activity,
+  Activity, BrushCleaning, Database, Download, FolderOpen, Keyboard, Plus, Power,
+  RotateCcw, Settings2, TriangleAlert, X,
 } from "lucide-react";
-import { exit } from "@tauri-apps/plugin-process";
-import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { load } from "@tauri-apps/plugin-store";
-import { invoke } from "@tauri-apps/api/core";
-import { DEFAULT_SETTINGS, type AppSettings } from "@/types";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { api, errorMessage, formatBytes, formatShortcut } from "@/lib/api";
+import { downloadPercent, relativeTime } from "@/hooks/useUpdates";
+import type { AppSettings, DatabaseInfo, Platform, UpdateStatus } from "@/types";
+
+type Confirm = (options: {
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  destructive?: boolean;
+}) => Promise<boolean>;
+
+interface SettingsPageProps {
+  settings: AppSettings;
+  platform: Platform;
+  version: string;
+  shortcutError: string | null;
+  onChange: (patch: Partial<AppSettings>) => Promise<boolean>;
+  onClearUnpinned: () => Promise<void>;
+  confirm: Confirm;
+  update: UpdateStatus;
+  onCheckUpdates: () => void;
+  onOpenUpdate: () => void;
+}
+
+const RETENTION_OPTIONS = [
+  { value: 1, label: "1 day" },
+  { value: 7, label: "7 days" },
+  { value: 30, label: "30 days" },
+  { value: 90, label: "90 days" },
+  { value: 365, label: "1 year" },
+  { value: 0, label: "Never" },
+];
+
+const MAX_ITEMS_OPTIONS = [
+  { value: 200, label: "200" },
+  { value: 500, label: "500" },
+  { value: 1000, label: "1,000" },
+  { value: 5000, label: "5,000" },
+  { value: 20000, label: "20,000" },
+  { value: 0, label: "Unlimited" },
+];
+
+const EXCLUDE_HINTS: Record<Platform, string> = {
+  macos: "Use the app's bundle ID, e.g. com.apple.Notes. The name shown under a clip works too.",
+  windows: "Use the program's file name, e.g. KeePass.exe.",
+  linux: "Use the process name, e.g. keepassxc. Detection needs xdotool on X11.",
+};
+
+const MODIFIER_CODES = /^(Meta|Control|Alt|Shift|OS)(Left|Right)?$/;
 
 export default function SettingsPage({
-  dbPath,
-  onSelectFolder,
-  onBack,
-  onClearHistory,
-  onResetApp,
-  onDeleteRange,
-}: any) {
-  const [autoStart, setAutoStart] = useState(false);
-  const [settings, setSettings] = useState<AppSettings>({ ...DEFAULT_SETTINGS });
+  settings, platform, version, shortcutError, onChange, onClearUnpinned, confirm,
+  update, onCheckUpdates, onOpenUpdate,
+}: SettingsPageProps) {
+  const [database, setDatabase] = useState<DatabaseInfo | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const [newExcludedApp, setNewExcludedApp] = useState("");
+  const [recordingShortcut, setRecordingShortcut] = useState(false);
 
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const store = await load("settings.json", {
-          autoSave: true,
-          defaults: {},
-        } as any);
-        const loaded = { ...DEFAULT_SETTINGS };
-        const keys = Object.keys(DEFAULT_SETTINGS) as (keyof AppSettings)[];
-        for (const key of keys) {
-          const saved = await store.get(key);
-          if (saved !== null && saved !== undefined) {
-            (loaded as any)[key] = saved;
-          }
-        }
-        setSettings(loaded);
-      } catch (e) {
-        console.error("Failed to load settings", e);
-      }
-    };
-    loadSettings();
+  const refreshDatabase = useCallback(async () => {
+    try {
+      setDatabase(await api.databaseInfo());
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
   }, []);
 
   useEffect(() => {
-    const checkAutostart = async () => {
-      try {
-        const enabled = await isEnabled();
-        setAutoStart(enabled);
-      } catch (err) {
-        console.error("Failed to check autostart status:", err);
+    refreshDatabase();
+  }, [refreshDatabase]);
+
+  /** Runs one action at a time and reports failures. */
+  const withBusy = async (key: string, action: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(key);
+    try {
+      await action();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const changeRetention = (patch: { retention_days?: number; max_history_items?: number }) =>
+    withBusy("retention", async () => {
+      const days = patch.retention_days ?? settings.retention_days;
+      const max = patch.max_history_items ?? settings.max_history_items;
+      const affected = await api.retentionImpact(days, max);
+      if (affected > 0) {
+        const ok = await confirm({
+          title: "Apply new retention?",
+          description: `${affected.toLocaleString()} unpinned ${affected === 1 ? "clip falls" : "clips fall"} outside this limit and will be deleted now. Pinned clips are never deleted.`,
+          confirmLabel: `Delete ${affected.toLocaleString()}`,
+          destructive: true,
+        });
+        if (!ok) return;
       }
+      if (await onChange(patch)) {
+        toast.success(affected > 0 ? `Deleted ${affected.toLocaleString()} old clips` : "Retention updated");
+        refreshDatabase();
+      }
+    });
+
+  const deleteEverything = () =>
+    withBusy("delete-all", async () => {
+      const ok = await confirm({
+        title: "Delete all history?",
+        description: "Every clip, including pinned ones, will be permanently deleted. This cannot be undone.",
+        confirmLabel: "Delete Everything",
+        destructive: true,
+      });
+      if (!ok) return;
+      const removed = await api.clearHistory(true);
+      await api.optimizeDatabase();
+      toast.success(`Deleted ${removed.toLocaleString()} ${removed === 1 ? "clip" : "clips"}`);
+      refreshDatabase();
+    });
+
+  const optimize = () =>
+    withBusy("optimize", async () => {
+      const before = database?.size_bytes ?? 0;
+      const info = await api.optimizeDatabase();
+      setDatabase(info);
+      const saved = before - info.size_bytes;
+      toast.success(saved > 0 ? `Database optimized, freed ${formatBytes(saved)}` : "Database optimized");
+    });
+
+  const chooseFolder = () =>
+    withBusy("folder", async () => {
+      const selected = await open({ directory: true, multiple: false, defaultPath: database?.folder });
+      if (typeof selected !== "string") return;
+      const result = await api.setDatabaseFolder(selected);
+      setDatabase(result.database);
+      toast.success(
+        result.action === "moved"
+          ? "History copied to the new folder. ClipDude will use it from now on."
+          : result.action === "opened"
+            ? "Opened the existing ClipDude database in that folder."
+            : "That folder is already in use.",
+      );
+    });
+
+  const useDefaultFolder = () =>
+    withBusy("folder", async () => {
+      const result = await api.setDatabaseFolder(null);
+      setDatabase(result.database);
+      toast.success("Using the default database location.");
+    });
+
+  const resetSettings = () =>
+    withBusy("reset", async () => {
+      const ok = await confirm({
+        title: "Reset all settings?",
+        description: "Settings return to their defaults. Your clipboard history and database location are kept.",
+        confirmLabel: "Reset",
+        destructive: true,
+      });
+      if (!ok) return;
+      await api.resetSettings();
+      toast.success("Settings reset");
+    });
+
+  const addExcludedApp = async () => {
+    const app = newExcludedApp.trim();
+    if (!app) return;
+    if (settings.excluded_apps.some((a) => a.toLowerCase() === app.toLowerCase())) {
+      toast.info(`${app} is already excluded`);
+      return;
+    }
+    if (await onChange({ excluded_apps: [...settings.excluded_apps, app] })) setNewExcludedApp("");
+  };
+
+  useEffect(() => {
+    if (!recordingShortcut) return;
+    const onKey = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        setRecordingShortcut(false);
+        return;
+      }
+      if (MODIFIER_CODES.test(e.code)) return;
+      const modifiers = [
+        e.metaKey && (platform === "macos" ? "Command" : "Super"),
+        e.ctrlKey && "Control",
+        e.altKey && "Alt",
+        e.shiftKey && "Shift",
+      ].filter(Boolean) as string[];
+      if (modifiers.length === 0 && !/^F\d+$/.test(e.code)) {
+        toast.info("Include a modifier such as Ctrl, Alt, or Shift");
+        return;
+      }
+      setRecordingShortcut(false);
+      onChange({ shortcut: [...modifiers, e.code].join("+") }).then((ok) => {
+        if (ok) toast.success("Shortcut updated");
+      });
     };
-    checkAutostart();
-  }, []);
-
-  const updateSetting = useCallback(
-    async <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-      try {
-        const store = await load("settings.json", {
-          autoSave: true,
-          defaults: {},
-        } as any);
-        await store.set(key, value);
-        setSettings((prev) => ({ ...prev, [key]: value }));
-      } catch (e) {
-        console.error("Failed to update setting", e);
-      }
-    },
-    []
-  );
-
-  const handleToggleAutoStart = async (checked: boolean) => {
-    try {
-      if (checked) {
-        await enable();
-      } else {
-        await disable();
-      }
-      setAutoStart(checked);
-      await updateSetting("auto_start", checked);
-    } catch (err) {
-      console.error("Failed to toggle autostart:", err);
-      setAutoStart(!checked);
-    }
-  };
-
-  const handleToggleMonitor = async (enabled: boolean) => {
-    try {
-      await invoke("set_monitor_enabled", { enabled });
-      await updateSetting("monitor_enabled", enabled);
-    } catch (e) {
-      console.error("Failed to toggle monitor:", e);
-    }
-  };
-
-  const handleAddExcludedApp = async () => {
-    if (!newExcludedApp.trim()) return;
-    const updated = [...settings.excluded_apps, newExcludedApp.trim()];
-    await updateSetting("excluded_apps", updated);
-    try {
-      await invoke("set_excluded_apps", { apps: updated });
-    } catch (_) {}
-    setNewExcludedApp("");
-  };
-
-  const handleRemoveExcludedApp = async (index: number) => {
-    const updated = settings.excluded_apps.filter((_, i) => i !== index);
-    await updateSetting("excluded_apps", updated);
-    try {
-      await invoke("set_excluded_apps", { apps: updated });
-    } catch (_) {}
-  };
-
-  const Toggle = ({
-    checked,
-    onChange,
-  }: {
-    checked: boolean;
-    onChange: (val: boolean) => void;
-  }) => (
-    <button
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 transition-all duration-300 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-        checked
-          ? "border-primary bg-primary shadow-[0_0_8px_rgba(34,197,94,0.3)]"
-          : "border-border bg-muted hover:bg-muted/80"
-      }`}
-    >
-      <span
-        aria-hidden="true"
-        className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-background shadow-md ring-0 transition-all duration-300 ease-in-out ${
-          checked ? "translate-x-4" : "translate-x-0.5"
-        }`}
-      />
-    </button>
-  );
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [recordingShortcut, platform, onChange]);
 
   return (
-    <div className="py-4 space-y-4">
-      <Button
-        variant="ghost"
-        onClick={onBack}
-        className="text-zinc-400 hover:text-primary text-[10px] font-black uppercase tracking-widest -ml-4"
-      >
-        &larr; Return to Clipboard
-      </Button>
-
-      <Accordion
-        type="multiple"
-        defaultValue={["system", "monitor", "privacy", "storage", "cleanup"]}
-        className="space-y-3"
-      >
-        <AccordionItem
-          value="system"
-          className="border border-border rounded-2xl px-5 bg-background/60 backdrop-blur-sm shadow-sm"
+    <div className="py-4 space-y-3">
+      <Section icon={<Settings2 className="w-5 h-5" />} title="General">
+        <ToggleRow
+          title="Launch at Login"
+          description="Start ClipDude automatically when you sign in."
+          checked={settings.auto_start}
+          onChange={(auto_start) => onChange({ auto_start })}
+        />
+        <ToggleRow
+          title="Open Window at Login"
+          description="Show the window on login. When off, ClipDude starts quietly in the menu bar / tray."
+          checked={settings.show_on_login}
+          disabled={!settings.auto_start}
+          onChange={(show_on_login) => onChange({ show_on_login })}
+        />
+        <ToggleRow
+          title="Smart Paste"
+          description="Clicking a clip pastes it into the app you were using. When off, clicking only copies."
+          checked={settings.smart_paste}
+          onChange={(smart_paste) => onChange({ smart_paste })}
+        />
+        <ToggleRow
+          title="Show Source App"
+          description="Display which app each clip was copied from."
+          checked={settings.show_source_app}
+          onChange={(show_source_app) => onChange({ show_source_app })}
+        />
+        <Row
+          title="Global Shortcut"
+          description={
+            recordingShortcut
+              ? "Press the new key combination, or Esc to cancel."
+              : "Shows or hides ClipDude from any app."
+          }
         >
-          <AccordionTrigger className="hover:no-underline text-sm font-bold">
-            <span className="flex items-center gap-3">
-              <Settings2 className="w-5 h-5" /> System & Behavior
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-3 pb-5">
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-xl border border-border">
-              <div className="space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-foreground">
-                  Launch at Login
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  Start ClipDude automatically when your computer boots.
-                </p>
-              </div>
-              <Toggle
-                checked={autoStart}
-                onChange={handleToggleAutoStart}
-              />
-            </div>
+          <div className="flex items-center gap-2">
+            <kbd
+              className={cn(
+                "px-2 py-1 rounded-md border border-border bg-background font-mono text-[11px] min-w-16 text-center",
+                recordingShortcut && "border-primary text-primary animate-pulse",
+              )}
+            >
+              {recordingShortcut ? "…" : formatShortcut(settings.shortcut, platform)}
+            </kbd>
+            <Button size="sm" variant="outline" onClick={() => setRecordingShortcut((r) => !r)}>
+              <Keyboard /> {recordingShortcut ? "Cancel" : "Change"}
+            </Button>
+          </div>
+        </Row>
+        {shortcutError && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 px-1">{shortcutError}</p>
+        )}
+<UpdateRow update={update} version={version} onCheck={onCheckUpdates} onOpen={onOpenUpdate} />
+        <ToggleRow
+          title="Check for Updates Automatically"
+          description="Look for new versions in the background and notify you when one is ready."
+          checked={settings.auto_check_updates}
+          onChange={(auto_check_updates) => onChange({ auto_check_updates })}
+        />
+      </Section>
 
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-xl border border-border">
-              <div className="space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-foreground">
-                  Smart Paste
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  Auto-paste into the active app after selecting a clip.
-                </p>
-              </div>
-              <Toggle
-                checked={settings.smart_paste}
-                onChange={(v) => updateSetting("smart_paste", v)}
-              />
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-xl border border-border">
-              <div className="space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-foreground">
-                  Show Source App
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  Display which app the clip was copied from.
-                </p>
-              </div>
-              <Toggle
-                checked={settings.show_source_app}
-                onChange={(v) => updateSetting("show_source_app", v)}
-              />
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem
-          value="monitor"
-          className="border border-border rounded-2xl px-5 bg-background/60 backdrop-blur-sm shadow-sm"
-        >
-          <AccordionTrigger className="hover:no-underline text-sm font-bold">
-            <span className="flex items-center gap-3">
-              <Activity className="w-5 h-5" /> Clipboard Monitor
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-3 pb-5">
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-xl border border-border">
-              <div className="space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-foreground">
-                  Monitor Active
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  Watch the clipboard for new copies. Disable to pause recording.
-                </p>
-              </div>
-              <Toggle
-                checked={settings.monitor_enabled}
-                onChange={handleToggleMonitor}
-              />
-            </div>
-
-            <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    settings.monitor_enabled
-                      ? "bg-emerald-500 animate-pulse"
-                      : "bg-muted-foreground/30"
-                  }`}
-                />
-                <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                  Monitor {settings.monitor_enabled ? "Active" : "Paused"}
-                </span>
-              </div>
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem
-          value="privacy"
-          className="border border-border rounded-2xl px-5 bg-background/60 backdrop-blur-sm shadow-sm"
-        >
-          <AccordionTrigger className="hover:no-underline text-sm font-bold">
-            <span className="flex items-center gap-3">
-              <Shield className="w-5 h-5" /> Privacy & Security
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-3 pb-5">
-            <div className="flex items-center justify-between p-3 bg-muted/50 rounded-xl border border-border">
-              <div className="space-y-1">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-foreground">
-                  Detect Sensitive Data
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  Auto-detect and mask credit cards, API keys in the UI.
-                </p>
-              </div>
-              <Toggle
-                checked={settings.detect_sensitive}
-                onChange={(v) => updateSetting("detect_sensitive", v)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                Excluded Apps (blacklist)
-              </p>
-              <p className="text-[9px] text-muted-foreground/60">
-                Clips copied from these apps will be ignored.
-              </p>
-
-              <div className="space-y-1">
-                {settings.excluded_apps.map((app, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg border border-border group"
-                  >
-                    <span className="text-[11px] font-mono text-foreground/70 truncate">
-                      {app}
-                    </span>
-                    <button
-                      onClick={() => handleRemoveExcludedApp(index)}
-                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex gap-2 mt-2">
-                <input
-                  type="text"
-                  value={newExcludedApp}
-                  onChange={(e) => setNewExcludedApp(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddExcludedApp()}
-                  placeholder="com.example.app"
-                  className="flex-1 h-8 px-3 text-[11px] font-mono rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleAddExcludedApp}
-                  className="h-8 px-3 text-[10px] font-bold uppercase"
+      <Section icon={<Activity className="w-5 h-5" />} title="Recording & Privacy">
+        <ToggleRow
+          title="Record Clipboard"
+          description="Save new copies to history. Turn off to pause recording."
+          checked={settings.monitor_enabled}
+          onChange={(monitor_enabled) => onChange({ monitor_enabled })}
+        />
+        <ToggleRow
+          title="Detect Sensitive Data"
+          description="Mask card numbers, API keys, and tokens in the list."
+          checked={settings.detect_sensitive}
+          onChange={(detect_sensitive) => onChange({ detect_sensitive })}
+        />
+        <ToggleRow
+          title="Don't Save Sensitive Data"
+          description="Skip clips that look like card numbers, API keys, or tokens entirely."
+          checked={settings.skip_sensitive}
+          onChange={(skip_sensitive) => onChange({ skip_sensitive })}
+        />
+        <div className="space-y-2 pt-1">
+          <Label>Ignored Apps</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Nothing copied in these apps is saved. Password managers that mark copies as private are always ignored. {EXCLUDE_HINTS[platform]}
+          </p>
+          <div className="space-y-1">
+            {settings.excluded_apps.map((app) => (
+              <div
+                key={app}
+                className="flex items-center justify-between px-3 py-1.5 bg-muted/50 rounded-lg border border-border group"
+              >
+                <span className="text-[11px] font-mono text-foreground/70 truncate">{app}</span>
+                <button
+                  onClick={() => onChange({ excluded_apps: settings.excluded_apps.filter((a) => a !== app) })}
+                  className="opacity-60 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all p-1"
+                  aria-label={`Stop ignoring ${app}`}
                 >
-                  <Plus className="w-3 h-3 mr-1" /> Add
-                </Button>
+                  <X className="w-3 h-3" />
+                </button>
               </div>
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-
-        <AccordionItem
-          value="storage"
-          className="border border-border rounded-2xl px-5 bg-background/60 backdrop-blur-sm shadow-sm"
-        >
-          <AccordionTrigger className="hover:no-underline text-sm font-bold">
-            <span className="flex items-center gap-3">
-              <Database className="w-5 h-5" /> Storage & Retention
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-3 pb-5">
-            <div className="p-3 bg-muted rounded-xl border border-border break-all text-[10px] font-mono text-muted-foreground">
-              {dbPath || "No path selected"}
-            </div>
-            <Button
-              onClick={onSelectFolder}
-              className="w-full bg-primary text-primary-foreground text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] transition-transform"
-            >
-              Move Database
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newExcludedApp}
+              onChange={(e) => setNewExcludedApp(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addExcludedApp()}
+              placeholder={platform === "macos" ? "com.example.app" : platform === "windows" ? "App.exe" : "process-name"}
+              className="flex-1 h-8 px-3 text-[11px] font-mono rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+            <Button size="sm" variant="outline" onClick={addExcludedApp} disabled={!newExcludedApp.trim()}>
+              <Plus /> Add
             </Button>
+          </div>
+        </div>
+      </Section>
 
-            <div className="space-y-3 pt-2">
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                    Max History Items
-                  </p>
-                  <span className="text-[11px] font-mono text-primary tabular-nums">
-                    {settings.max_history_items || "Unlimited"}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={100}
-                  max={5000}
-                  step={100}
-                  value={settings.max_history_items}
-                  onChange={(e) =>
-                    updateSetting(
-                      "max_history_items",
-                      parseInt(e.target.value)
-                    )
-                  }
-                  className="w-full h-1 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
-                />
-                <div className="flex justify-between text-[9px] text-muted-foreground/40 font-mono">
-                  <span>100</span>
-                  <span>5000</span>
-                </div>
-              </div>
+      <Section icon={<Database className="w-5 h-5" />} title="Storage & Retention">
+        <div className="p-3 bg-muted/50 rounded-xl border border-border space-y-1">
+          <div className="flex items-center justify-between gap-3">
+            <Label>Database</Label>
+            {database?.available && (
+              <span className="text-[11px] font-mono text-muted-foreground tabular-nums">
+                {formatBytes(database.size_bytes)}
+              </span>
+            )}
+          </div>
+          <p className="break-all text-[11px] font-mono text-muted-foreground select-text">
+            {database?.path ?? "Loading…"}
+          </p>
+          {database?.warning && (
+            <p className="text-[11px] text-amber-600 dark:text-amber-400">{database.warning}</p>
+          )}
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <Button variant="outline" onClick={chooseFolder} disabled={busy !== null}>
+            <FolderOpen /> Change Folder
+          </Button>
+          <Button variant="outline" onClick={useDefaultFolder} disabled={busy !== null || database?.is_default}>
+            <RotateCcw /> Use Default
+          </Button>
+          <Button variant="outline" onClick={optimize} disabled={busy !== null}>
+            <BrushCleaning /> {busy === "optimize" ? "Optimizing…" : "Optimize"}
+          </Button>
+        </div>
 
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                    Auto-Delete After (days)
-                  </p>
-                  <span className="text-[11px] font-mono text-primary tabular-nums">
-                    {settings.retention_days || "Never"}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={365}
-                  step={7}
-                  value={settings.retention_days}
-                  onChange={(e) =>
-                    updateSetting("retention_days", parseInt(e.target.value))
-                  }
-                  className="w-full h-1 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
-                />
-                <div className="flex justify-between text-[9px] text-muted-foreground/40 font-mono">
-                  <span>Never (0)</span>
-                  <span>365</span>
-                </div>
-              </div>
-            </div>
-          </AccordionContent>
-        </AccordionItem>
+        <ChoiceRow
+          title="Auto-Delete Clips Not Used For"
+          options={RETENTION_OPTIONS}
+          value={settings.retention_days}
+          disabled={busy !== null}
+          onSelect={(retention_days) => changeRetention({ retention_days })}
+        />
+        <ChoiceRow
+          title="Keep at Most"
+          options={MAX_ITEMS_OPTIONS}
+          value={settings.max_history_items}
+          disabled={busy !== null}
+          onSelect={(max_history_items) => changeRetention({ max_history_items })}
+        />
+        <p className="text-[11px] text-muted-foreground px-1">
+          Cleanup runs at startup, after each copy, and every 30 minutes. Pinned clips are never deleted automatically.
+        </p>
+      </Section>
 
-        <AccordionItem
-          value="cleanup"
-          className="border border-border rounded-2xl px-5 bg-background/60 backdrop-blur-sm shadow-sm"
-        >
-          <AccordionTrigger className="hover:no-underline text-sm font-bold">
-            <span className="flex items-center gap-3">
-              <BrushCleaning className="w-5 h-5" /> Manual Cleanup
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-3 pb-5">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">
-              Delete Older Than:
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              <Button
-                variant="outline"
-                onClick={() => onDeleteRange("day")}
-                className="text-[10px] font-bold uppercase hover:bg-primary hover:text-primary-foreground transition-colors"
-              >
-                24 Hours
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => onDeleteRange("week")}
-                className="text-[10px] font-bold uppercase hover:bg-primary hover:text-primary-foreground transition-colors"
-              >
-                7 Days
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => onDeleteRange("month")}
-                className="text-[10px] font-bold uppercase hover:bg-primary hover:text-primary-foreground transition-colors"
-              >
-                30 Days
-              </Button>
-            </div>
-          </AccordionContent>
-        </AccordionItem>
+      <Section icon={<TriangleAlert className="w-5 h-5" />} title="Danger Zone" danger>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="destructive" disabled={busy !== null} onClick={() => withBusy("clear", onClearUnpinned)}>
+            Clear Unpinned History
+          </Button>
+          <Button variant="destructive" disabled={busy !== null} onClick={deleteEverything}>
+            Delete All (Incl. Pinned)
+          </Button>
+          <Button variant="outline" disabled={busy !== null} onClick={resetSettings}>
+            Reset All Settings
+          </Button>
+          <Button variant="outline" onClick={() => api.quit()}>
+            <Power /> Quit ClipDude
+          </Button>
+        </div>
+      </Section>
+    </div>
+  );
+}
 
-        <AccordionItem
-          value="danger"
-          className="border border-destructive/30 rounded-2xl px-5 bg-destructive/5"
-        >
-          <AccordionTrigger className="hover:no-underline text-sm font-bold text-destructive">
-            <span className="flex items-center gap-3">
-              <TriangleAlert className="w-5 h-5" /> Danger Zone
-            </span>
-          </AccordionTrigger>
-          <AccordionContent className="space-y-3 pb-5">
-            <Button
-              variant="outline"
-              onClick={onClearHistory}
-              className="w-full border-destructive/50 text-destructive hover:bg-destructive hover:text-destructive-foreground text-[10px] font-black uppercase tracking-widest transition-colors"
+function UpdateRow({
+  update, version, onCheck, onOpen,
+}: {
+  update: UpdateStatus;
+  version: string;
+  onCheck: () => void;
+  onOpen: () => void;
+}) {
+  const percent = downloadPercent(update);
+  const checked = update.last_checked ? ` · checked ${relativeTime(update.last_checked)}` : "";
+  const description = {
+    idle: `You're running ClipDude ${version}.`,
+    checking: "Checking for updates…",
+    up_to_date: `ClipDude ${version} is up to date${checked}.`,
+    available: `Version ${update.version} is available — you have ${version}.`,
+    downloading: `Downloading ${update.version}${percent !== null ? ` · ${percent}%` : "…"}`,
+    installing: `Installing ${update.version}… ClipDude will restart.`,
+    error: update.error ?? "The last update check failed.",
+  }[update.phase];
+  const hasUpdate = update.version !== null && update.phase !== "checking";
+
+  return (
+    <Row title="Updates" description={description}>
+      <Button
+        size="sm"
+        variant={hasUpdate ? "default" : "outline"}
+        disabled={update.phase === "checking"}
+        onClick={hasUpdate ? onOpen : onCheck}
+      >
+        {update.phase === "checking" ? <RotateCcw className="animate-spin" /> : <Download />}
+        {hasUpdate ? "View Update" : update.phase === "checking" ? "Checking…" : "Check Now"}
+      </Button>
+    </Row>
+  );
+}
+
+function Section({
+  icon, title, danger, children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className={cn(
+        "border rounded-2xl px-5 py-4 space-y-3 backdrop-blur-sm shadow-sm",
+        danger ? "border-destructive/30 bg-destructive/5" : "border-border bg-background/60",
+      )}
+    >
+      <h2 className={cn("flex items-center gap-3 text-sm font-bold", danger && "text-destructive")}>
+        {icon} {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">{children}</p>
+  );
+}
+
+function Row({
+  title, description, children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 p-3 bg-muted/50 rounded-xl border border-border">
+      <div className="space-y-1 min-w-0">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-foreground">{title}</p>
+        <p className="text-[11px] text-muted-foreground">{description}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ToggleRow({
+  title, description, checked, disabled, onChange,
+}: {
+  title: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <Row title={title} description={description}>
+      <button
+        role="switch"
+        aria-checked={checked}
+        aria-label={title}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 transition-all duration-200",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+          "disabled:cursor-not-allowed disabled:opacity-40",
+          checked ? "border-primary bg-primary" : "border-border bg-muted hover:bg-muted/80",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none inline-block h-3.5 w-3.5 rounded-full bg-background shadow-md transition-transform duration-200",
+            checked ? "translate-x-4" : "translate-x-0.5",
+          )}
+        />
+      </button>
+    </Row>
+  );
+}
+
+function ChoiceRow({
+  title, options, value, disabled, onSelect,
+}: {
+  title: string;
+  options: { value: number; label: string }[];
+  value: number;
+  disabled?: boolean;
+  onSelect: (value: number) => void;
+}) {
+  return (
+    <div className="space-y-2 pt-1">
+      <Label>{title}</Label>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={title}>
+        {options.map((option) => {
+          const active = option.value === value;
+          return (
+            <button
+              key={option.value}
+              role="radio"
+              aria-checked={active}
+              disabled={disabled}
+              onClick={() => !active && onSelect(option.value)}
+              className={cn(
+                "px-3 h-7 rounded-lg border text-[11px] font-mono transition-colors duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60",
+                active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background hover:bg-muted text-foreground/80",
+              )}
             >
-              Clear All Unpinned History
-            </Button>
-
-            <Button
-              variant="destructive"
-              onClick={onResetApp}
-              className="w-full text-[10px] font-black uppercase tracking-widest opacity-90 hover:opacity-100"
-            >
-              Reset All Settings
-            </Button>
-
-            <div className="w-full h-px bg-destructive/20 my-4" />
-
-            <Button
-              onClick={async () => await exit(0)}
-              className="w-full flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-500/20"
-            >
-              <Power className="w-3 h-3" /> Quit ClipDude
-            </Button>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+              {option.label}
+            </button>
+          );
+        })}
+        {!options.some((option) => option.value === value) && (
+          <span className="px-3 h-7 inline-flex items-center rounded-lg border border-primary text-[11px] font-mono text-primary">
+            {value.toLocaleString()} (custom)
+          </span>
+        )}
+      </div>
     </div>
   );
 }

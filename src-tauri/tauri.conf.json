@@ -1,32 +1,25 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-
   "productName": "ClipDude",
-  "version": "0.1.0",
+  "version": "../package.json",
   "identifier": "com.walter.clipdude",
-
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
-
   "app": {
-    "macOSPrivateApi": true,
-
     "security": {
       "csp": {
         "default-src": "'self'",
-        "img-src": "'self' asset: https: data: blob:",
+        "img-src": "'self' data: blob:",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:",
-        "script-src": "'self' 'unsafe-eval'",
-        "connect-src": "'self' ipc: http://ipc.localhost ws: wss: https:",
-        "media-src": "'self' blob: data:"
+        "script-src": "'self'",
+        "connect-src": "'self' ipc: http://ipc.localhost"
       }
     },
-
     "windows": [
       {
         "label": "main",
@@ -35,26 +28,17 @@
         "height": 640,
         "minWidth": 700,
         "minHeight": 520,
-        "maximizable": true,
-        "minimizable": true,
-        "closable": true,
         "resizable": true,
-        "fullscreen": false,
         "center": true,
-        "visible": true,
+        "visible": false,
         "focus": true,
-        "transparent": false,
         "decorations": true,
         "shadow": true,
-        "alwaysOnTop": false,
         "skipTaskbar": false,
-        "dragDropEnabled": true,
-        "theme": "Dark",
-        "windowEffects": null
+        "dragDropEnabled": false
       }
     ]
   },
-
   "bundle": {
     "active": true,
     "targets": "all",
@@ -62,7 +46,7 @@
     "publisher": "Walter",
     "category": "Utility",
     "shortDescription": "A blazing-fast native clipboard manager.",
-    "longDescription": "ClipDude is a blazing-fast, secure, and fully native clipboard manager built with Tauri, designed for macOS, Windows, Linux, and Android.",
+    "longDescription": "ClipDude is a fast, private, local-only clipboard manager for macOS, Windows, and Linux.",
     "copyright": "© 2026 Walter",
     "icon": [
       "icons/32x32.png",
@@ -96,7 +80,7 @@
     },
     "linux": {
       "appimage": {
-        "bundleMediaFramework": true
+        "bundleMediaFramework": false
       },
       "deb": {
         "depends": [
@@ -105,19 +89,13 @@
           "libayatana-appindicator3-1"
         ]
       }
-    },
-    "android": {
-      "minSdkVersion": 24
     }
   },
-
   "plugins": {
     "updater": {
-      "active": true,
-      "dialog": true,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI2QjdDQ0ZDREJENkZGOEEKUldTSy85YmIvTXkzSm0rdGp5cHNEWVBvMDJqYVp3U0V0QnAyNllab3NjRWZBODlzUUlqcEJ1ZVgK",
       "endpoints": [
-        "https://github.com/rimu-7/clipdude/releases/latest/download/updater.json"
+        "https://github.com/rimu-7/clipdude/releases/latest/download/latest.json"
       ]
     }
   }

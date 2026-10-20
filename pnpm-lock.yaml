@@ -17,48 +17,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2.11.0
         version: 2.11.0
-      '@tauri-apps/plugin-autostart':
-        specifier: ~2.5.1
-        version: 2.5.1
-      '@tauri-apps/plugin-clipboard-manager':
-        specifier: ~2.3.2
-        version: 2.3.2
       '@tauri-apps/plugin-dialog':
         specifier: ~2.7.1
         version: 2.7.1
-      '@tauri-apps/plugin-fs':
-        specifier: ~2.5.1
-        version: 2.5.1
-      '@tauri-apps/plugin-global-shortcut':
-        specifier: ~2.3.1
-        version: 2.3.1
-      '@tauri-apps/plugin-notification':
-        specifier: ~2.3.3
-        version: 2.3.3
-      '@tauri-apps/plugin-opener':
-        specifier: ^2.5.4
-        version: 2.5.4
-      '@tauri-apps/plugin-os':
-        specifier: ~2.3.2
-        version: 2.3.2
-      '@tauri-apps/plugin-positioner':
-        specifier: ~2.3.1
-        version: 2.3.1
-      '@tauri-apps/plugin-process':
-        specifier: ~2.3.1
-        version: 2.3.1
-      '@tauri-apps/plugin-shell':
-        specifier: ~2.3.5
-        version: 2.3.5
-      '@tauri-apps/plugin-sql':
-        specifier: ~2.4.0
-        version: 2.4.0
-      '@tauri-apps/plugin-store':
-        specifier: ~2.4.3
-        version: 2.4.3
-      '@tauri-apps/plugin-updater':
-        specifier: ~2.10.1
-        version: 2.10.1
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -68,9 +29,6 @@ importers:
       framer-motion:
         specifier: ^12.38.0
         version: 12.38.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      fuse.js:
-        specifier: ^7.3.0
-        version: 7.3.0
       lucide-react:
         specifier: ^1.8.0
         version: 1.8.0(react@19.2.5)
@@ -83,9 +41,6 @@ importers:
       react-dom:
         specifier: ^19.1.0
         version: 19.2.5(react@19.2.5)
-      react-router-dom:
-        specifier: ^7.14.1
-        version: 7.14.1(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       shadcn:
         specifier: ^4.2.0
         version: 4.2.0(@types/node@25.6.0)(typescript@5.8.3)
@@ -1575,47 +1530,8 @@ packages:
     engines: {node: '>= 10'}
     hasBin: true
 
-  '@tauri-apps/plugin-autostart@2.5.1':
-    resolution: {integrity: sha512-zS/xx7yzveCcotkA+8TqkI2lysmG2wvQXv2HGAVExITmnFfHAdj1arGsbbfs3o6EktRHf6l34pJxc3YGG2mg7w==}
-
-  '@tauri-apps/plugin-clipboard-manager@2.3.2':
-    resolution: {integrity: sha512-CUlb5Hqi2oZbcZf4VUyUH53XWPPdtpw43EUpCza5HWZJwxEoDowFzNUDt1tRUXA8Uq+XPn17Ysfptip33sG4eQ==}
-
   '@tauri-apps/plugin-dialog@2.7.1':
     resolution: {integrity: sha512-OK1UBXYt+ojcmxMktzzuyonYIFta8CmAASpX+CA+DTGK24KlHjhYI6x2iOJ/TjZF4N7/ACK1oFmEOjIY9IhzOQ==}
-
-  '@tauri-apps/plugin-fs@2.5.1':
-    resolution: {integrity: sha512-9Lz+Jopp6QyeEWhlpkMx4R/+P9HgR+AVAI4vOZhlT8Xaymtz8iVI/Ov984/XTqgJz/5gz5NretqPB/XEMS3NhQ==}
-
-  '@tauri-apps/plugin-global-shortcut@2.3.1':
-    resolution: {integrity: sha512-vr40W2N6G63dmBPaha1TsBQLLURXG538RQbH5vAm0G/ovVZyXJrmZR1HF1W+WneNloQvwn4dm8xzwpEXRW560g==}
-
-  '@tauri-apps/plugin-notification@2.3.3':
-    resolution: {integrity: sha512-Zw+ZH18RJb41G4NrfHgIuofJiymusqN+q8fGUIIV7vyCH+5sSn5coqRv/MWB9qETsUs97vmU045q7OyseCV3Qg==}
-
-  '@tauri-apps/plugin-opener@2.5.4':
-    resolution: {integrity: sha512-1HnPkb+AmgO29HBazm4uPLKB+r7zzcTBW1d0fyYp1uP+jwtpoiNDGKMMzz58SFp49nOIrxdE3aUJtT57lfO9CQ==}
-
-  '@tauri-apps/plugin-os@2.3.2':
-    resolution: {integrity: sha512-n+nXWeuSeF9wcEsSPmRnBEGrRgOy6jjkSU+UVCOV8YUGKb2erhDOxis7IqRXiRVHhY8XMKks00BJ0OAdkpf6+A==}
-
-  '@tauri-apps/plugin-positioner@2.3.1':
-    resolution: {integrity: sha512-9JiNO3tpHhz91VUG/sncGha4CL1qQHlftnfkwWJIquAR7rhLA9GUdW1oIdZLbNswNzkkd9qVywFmh658eFEL2Q==}
-
-  '@tauri-apps/plugin-process@2.3.1':
-    resolution: {integrity: sha512-nCa4fGVaDL/B9ai03VyPOjfAHRHSBz5v6F/ObsB73r/dA3MHHhZtldaDMIc0V/pnUw9ehzr2iEG+XkSEyC0JJA==}
-
-  '@tauri-apps/plugin-shell@2.3.5':
-    resolution: {integrity: sha512-jewtULhiQ7lI7+owCKAjc8tYLJr92U16bPOeAa472LHJdgaibLP83NcfAF2e+wkEcA53FxKQAZ7byDzs2eeizg==}
-
-  '@tauri-apps/plugin-sql@2.4.0':
-    resolution: {integrity: sha512-SIICc5JlnK6OrBZzOw7MmhXHPlmASpt5zLWIu10WW4kLr5cDYOXHdV2MoCgYQkgZLQfyBYgF3SQa5XCisUiQkw==}
-
-  '@tauri-apps/plugin-store@2.4.3':
-    resolution: {integrity: sha512-9LWPj9yMphRi9czEtUv87XHbl1b6xgd9EXpPrUnq6nG7+nbtoF84d4Kwz9xhAv/Hf30sr58pq7EOlyI936y8qw==}
-
-  '@tauri-apps/plugin-updater@2.10.1':
-    resolution: {integrity: sha512-NFYMg+tWOZPJdzE/PpFj2qfqwAWwNS3kXrb1tm1gnBJ9mYzZ4WDRrwy8udzWoAnfGCHLuePNLY1WVCNHnh3eRA==}
 
   '@ts-morph/common@0.27.0':
     resolution: {integrity: sha512-Wf29UqxWDpc+i61k3oIOzcUfQt79PIT9y/MWfAGlrkjg6lBC1hwDECLXPVJAhWjiGbfBCxZd65F/LIZF3+jeJQ==}
@@ -2077,10 +1993,6 @@ packages:
 
   function-bind@1.1.2:
     resolution: {integrity: sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==}
-
-  fuse.js@7.3.0:
-    resolution: {integrity: sha512-plz8RVjfcDedTGfVngWH1jmJvBvAwi1v2jecfDerbEnMcmOYUEEwKFTHbNoCiYyzaK2Ws8lABkTCcRSqCY1q4w==}
-    engines: {node: '>=10'}
 
   fuzzysort@3.1.0:
     resolution: {integrity: sha512-sR9BNCjBg6LNgwvxlBd0sBABvQitkLzoVY9MYYROQVX/FvfJ4Mai9LsGhDgd8qYdds0bY77VzYd5iuB+v5rwQQ==}
@@ -2681,23 +2593,6 @@ packages:
       '@types/react':
         optional: true
 
-  react-router-dom@7.14.1:
-    resolution: {integrity: sha512-ZkrQuwwhGibjQLqH1eCdyiZyLWglPxzxdl5tgwgKEyCSGC76vmAjleGocRe3J/MLfzMUIKwaFJWpFVJhK3d2xA==}
-    engines: {node: '>=20.0.0'}
-    peerDependencies:
-      react: '>=18'
-      react-dom: '>=18'
-
-  react-router@7.14.1:
-    resolution: {integrity: sha512-5BCvFskyAAVumqhEKh/iPhLOIkfxcEUz8WqFIARCkMg8hZZzDYX9CtwxXA0e+qT8zAxmMC0x3Ckb9iMONwc5jg==}
-    engines: {node: '>=20.0.0'}
-    peerDependencies:
-      react: '>=18'
-      react-dom: '>=18'
-    peerDependenciesMeta:
-      react-dom:
-        optional: true
-
   react-style-singleton@2.2.3:
     resolution: {integrity: sha512-b6jSvxvVnyptAiLjbkWLE/lOnR4lfTtDAl+eUC7RZy+QQWc6wRzIV2CE6xBuMmDxc2qIihtDCZD5NPOFl7fRBQ==}
     engines: {node: '>=10'}
@@ -2772,9 +2667,6 @@ packages:
   serve-static@2.2.1:
     resolution: {integrity: sha512-xRXBn0pPqQTVQiC8wyQrKs2MOlX24zQ0POGaj0kultvoOCstBQM5yvOhAVSUwOMjQtTvsPWoNCHfPGwaaQJhTw==}
     engines: {node: '>= 18'}
-
-  set-cookie-parser@2.7.2:
-    resolution: {integrity: sha512-oeM1lpU/UvhTxw+g3cIfxXHyJRc/uidd3yK1P242gzHds0udQBYzs3y8j4gCCW+ZJ7ad0yctld8RYO+bdurlvw==}
 
   setprototypeof@1.2.0:
     resolution: {integrity: sha512-E5LDX7Wrp85Kil5bhZv46j8jOeboKq5JMmYM3gVGdGH8xFpPWXUMsNrlODCrkoxMEeNi/XZIwuRvY4XNwYMJpw==}
@@ -4472,59 +4364,7 @@ snapshots:
       '@tauri-apps/cli-win32-ia32-msvc': 2.11.1
       '@tauri-apps/cli-win32-x64-msvc': 2.11.1
 
-  '@tauri-apps/plugin-autostart@2.5.1':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-clipboard-manager@2.3.2':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
   '@tauri-apps/plugin-dialog@2.7.1':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-fs@2.5.1':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-global-shortcut@2.3.1':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-notification@2.3.3':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-opener@2.5.4':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-os@2.3.2':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-positioner@2.3.1':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-process@2.3.1':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-shell@2.3.5':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-sql@2.4.0':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-store@2.4.3':
-    dependencies:
-      '@tauri-apps/api': 2.11.0
-
-  '@tauri-apps/plugin-updater@2.10.1':
     dependencies:
       '@tauri-apps/api': 2.11.0
 
@@ -5006,8 +4846,6 @@ snapshots:
     optional: true
 
   function-bind@1.1.2: {}
-
-  fuse.js@7.3.0: {}
 
   fuzzysort@3.1.0: {}
 
@@ -5550,20 +5388,6 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.14
 
-  react-router-dom@7.14.1(react-dom@19.2.5(react@19.2.5))(react@19.2.5):
-    dependencies:
-      react: 19.2.5
-      react-dom: 19.2.5(react@19.2.5)
-      react-router: 7.14.1(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-
-  react-router@7.14.1(react-dom@19.2.5(react@19.2.5))(react@19.2.5):
-    dependencies:
-      cookie: 1.1.1
-      react: 19.2.5
-      set-cookie-parser: 2.7.2
-    optionalDependencies:
-      react-dom: 19.2.5(react@19.2.5)
-
   react-style-singleton@2.2.3(@types/react@19.2.14)(react@19.2.5):
     dependencies:
       get-nonce: 1.0.1
@@ -5674,8 +5498,6 @@ snapshots:
       send: 1.2.1
     transitivePeerDependencies:
       - supports-color
-
-  set-cookie-parser@2.7.2: {}
 
   setprototypeof@1.2.0: {}
 
